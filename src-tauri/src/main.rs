@@ -10,9 +10,10 @@ use std::path::PathBuf;
 use crate::core::game::ExtendedGameInformation;
 use crate::core::game::LogfileGameList;
 
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::Result;
 use parser_lib::{self};
-use tauri::api::Error;
+use serde::Serialize;
+use serde::Serializer;
 use tauri::api::path::document_dir;
 use tauri_plugin_fs_watch::Watcher;
 
@@ -28,24 +29,44 @@ enum ParserAppError {
     #[error("Parser lib error: {0}")]
     ParserLibError(String),
     #[error("Get Input files error: {0}")]
-    InputFilesError(String)
+    InputFilesError(String),
 }
 
+impl Serialize for ParserAppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(self.to_string().as_ref())
+    }
+}
+
+type ParserAppResult<T, E = ParserAppError> = color_eyre::Result<T, E>;
+
 #[tauri::command]
-fn update_game_list() -> tauri::Result<String> {
-    let documentdir_path = document_dir().ok_or_else(|| tauri::Error::FailedToExecuteApi(Error::Path("Could not find documents directory".into())))?;
+fn update_game_list() -> ParserAppResult<String> {
+    if let Some(documentdir_path) = document_dir() {
+        let InputFiles {
+            replay_file_path,
+            logfile_path,
+        } = get_input_files(documentdir_path)?;
 
-    let InputFiles { replay_file_path, logfile_path } = get_input_files(documentdir_path).map_err(|error| ParserAppError::InputFilesError(error.to_string()))?;
-    
-    let mut game_list = LogfileGameList::new();
-    game_list.read_logfile(&logfile_path).unwrap();
-    game_list.parse();
+        let mut game_list = LogfileGameList::new();
+        game_list.read_logfile(&logfile_path).unwrap();
+        game_list.parse();
 
-    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string()).map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
-    
-    let result = ExtendedGameInformation::from(parsed_replay, game_list.games.last().unwrap());
+        let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
+            .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
 
-    serde_json::to_string_pretty(&result)
+        let result = ExtendedGameInformation::from(parsed_replay, game_list.games.last().unwrap());
+
+        serde_json::to_string_pretty(&result)
+            .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
+    } else {
+        return Err(ParserAppError::ParserLibError(
+            "Could not find documents directory!".into(),
+        ));
+    }
 }
 
 fn main() {
@@ -62,7 +83,7 @@ struct InputFiles {
     replay_file_path: PathBuf,
     logfile_path: PathBuf,
 }
-fn get_input_files(document_dir_path: PathBuf) -> Result<InputFiles> {
+fn get_input_files(document_dir_path: PathBuf) -> ParserAppResult<InputFiles> {
     let mut game_path = document_dir_path;
     game_path.push("My Games");
     game_path.push("Dawn of War II - Retribution");
@@ -76,11 +97,15 @@ fn get_input_files(document_dir_path: PathBuf) -> Result<InputFiles> {
     replay_file_path.push("temp.rec");
 
     if !logfile_path.exists() {
-        return Err(eyre!("Could not find logfile."));
+        return Err(ParserAppError::InputFilesError(
+            "Could not find logfile!".into(),
+        ));
     }
 
     if !replay_file_path.exists() {
-        return Err(eyre!("Could not find replay file."));
+        return Err(ParserAppError::InputFilesError(
+            "Could not find replay file!".into(),
+        ));
     }
 
     Ok(InputFiles {
@@ -95,9 +120,20 @@ mod tests {
 
     #[test]
     fn merged_replay_json_is_correct() {
-        let mut logfile_path = PathBuf::new();
-        logfile_path.push("warnings_confirmed.txt");
+        // Mock Documents folder to be our test folder so we can control
+        // game files content
+        std::env::set_var("HOME", "./test");
 
-        assert!(logfile_path.exists());
+        let game_list = update_game_list();
+        assert!(game_list.is_ok());
+
+        let games = game_list.unwrap();
+
+        assert!(games.contains("Raubritter"));
+        assert!(games.contains("JamezNunes"));
+        assert!(games.contains("Cerano"));
+        assert!(games.contains("Venniie"));
+        assert!(games.contains("[SB]Odium"));
+        assert!(games.contains("Morgan MLGman"));
     }
 }
