@@ -5,15 +5,12 @@
 
 mod core;
 
-use std::path::PathBuf;
-
-use crate::core::game::ExtendedGameInformation;
-use crate::core::game::LogfileGameList;
-
-use color_eyre::Result;
+use crate::core::{
+    error::{ParserAppError, ParserAppResult},
+    game::{ExtendedGameInformation, LogfileGameList},
+};
 use parser_lib::{self};
-use serde::Serialize;
-use serde::Serializer;
+use std::path::PathBuf;
 use tauri::api::path::document_dir;
 use tauri_plugin_fs_watch::Watcher;
 
@@ -22,26 +19,6 @@ fn parse_file(path: &str) -> Option<String> {
     let file_path = path.to_string();
     parser_lib::parse_file(file_path)
 }
-
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-enum ParserAppError {
-    #[error("Parser lib error: {0}")]
-    ParserLibError(String),
-    #[error("Get Input files error: {0}")]
-    InputFilesError(String),
-}
-
-impl Serialize for ParserAppError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.to_string().as_ref())
-    }
-}
-
-type ParserAppResult<T, E = ParserAppError> = color_eyre::Result<T, E>;
 
 #[tauri::command]
 fn update_game_list() -> ParserAppResult<String> {
@@ -97,15 +74,11 @@ fn get_input_files(document_dir_path: PathBuf) -> ParserAppResult<InputFiles> {
     replay_file_path.push("temp.rec");
 
     if !logfile_path.exists() {
-        return Err(ParserAppError::InputFilesError(
-            "Could not find logfile!".into(),
-        ));
+        return Err(ParserAppError::LogfileNotFoundError);
     }
 
     if !replay_file_path.exists() {
-        return Err(ParserAppError::InputFilesError(
-            "Could not find replay file!".into(),
-        ));
+        return Err(ParserAppError::ReplayNotFoundError);
     }
 
     Ok(InputFiles {

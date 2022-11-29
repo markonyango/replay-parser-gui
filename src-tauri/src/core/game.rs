@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use std::{error, fs::File, io::Read, path::Path};
 use thiserror::Error;
 
-use super::player_info::{ExtendedPlayerInformation, LogfilePlayerInfo};
+use crate::core::error::ParserAppError;
+
+use super::{player_info::{ExtendedPlayerInformation, LogfilePlayerInfo}, error::ParserAppResult};
 
 const MATCH_BLOCK_PATTERNS: [&str; 7] = [
     r"Match Started - \[\d+:(.+) /steam/(\d+)\], slot =\D+(\d)",
@@ -123,15 +125,9 @@ impl LogfileGameList {
         Self::default()
     }
 
-    pub fn read_logfile(&mut self, logfilepath: &Path) -> Result<(), Report> {
-        assert!(
-            logfilepath.exists(),
-            "Could not find logfile in game folder!"
-        );
-
+    pub fn read_logfile(&mut self, logfilepath: &Path) -> ParserAppResult<()> {
         if !logfilepath.exists() {
-            return Err(eyre!("Could not find logfile in game folder!"))
-                .with_error(|| LogfileNotFoundError("Could not find logfile!".into()));
+            return Err(ParserAppError::LogfileNotFoundError);
         }
 
         // Rust can not directly read from this file since it is not UTF-8 encoded
