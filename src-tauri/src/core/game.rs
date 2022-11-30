@@ -16,7 +16,10 @@ use thiserror::Error;
 
 use crate::core::error::ParserAppError;
 
-use super::{player_info::{ExtendedPlayerInformation, LogfilePlayerInfo}, error::ParserAppResult};
+use super::{
+    error::ParserAppResult,
+    player_info::{ExtendedPlayerInformation, LogfilePlayerInfo},
+};
 
 const MATCH_BLOCK_PATTERNS: [&str; 7] = [
     r"Match Started - \[\d+:(.+) /steam/(\d+)\], slot =\D+(\d)",
@@ -151,7 +154,7 @@ impl LogfileGameList {
         Ok(())
     }
 
-    pub fn parse(&mut self) {
+    pub fn parse(&mut self) -> ParserAppResult<()> {
         let regexes = GAME_START_REGEXP
             .patterns()
             .iter()
@@ -173,10 +176,15 @@ impl LogfileGameList {
                 })
                 .collect::<Vec<_>>();
 
-            assert_eq!(match_captures.len(), 1);
+            if match_captures.len() != 1 {
+                return Err(ParserAppError::LogfileParseError(
+                    "Found more than 1 game to parse".into(),
+                ));
+            }
 
             let match_group = &match_captures[0];
             match match_group.index {
+                0 | 2 => (),
                 1 => {
                     // Is there any game in the list to begin with
                     if let Some(last_game) = self.games.last_mut() {
@@ -191,12 +199,13 @@ impl LogfileGameList {
                     }
 
                     // At this point there should be a game in the list
-                    let map = match_group.captures.get(1).unwrap().as_str();
+                    let Some(map) = match_group.captures.get(1) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse map from logfile".into()));
+                    };
 
                     let len = self.games.len() - 1;
-                    self.games[len].map = map.to_string();
+                    self.games[len].map = map.as_str().to_string();
                 }
-                // 2 => todo!(), // Only needed if we'd like to act upon the "Player X dropped" event
                 3 => {
                     if let Some(last_game) = self.games.last_mut() {
                         let mut player = LogfilePlayerInfo::new();
@@ -219,18 +228,20 @@ impl LogfileGameList {
                 }
                 5 => {
                     if let Some(last_game) = self.games.last_mut() {
-                        let match_relic_id = match_group
-                            .captures
-                            .get(1)
-                            .unwrap()
-                            .as_str()
-                            .parse::<usize>()
-                            .unwrap();
+                        let Some(match_relic_id) = match_group.captures.get(1) else {
+                            return Err(ParserAppError::LogfileParseError("Could not extract match relic id from logfile".into()));
+                        };
+
+                        let Ok(match_relic_id) = match_relic_id.as_str().parse::<usize>() else {
+                            return Err(ParserAppError::LogfileParseError("Could not parse match relic id in logfile".into()));
+                        };
+
                         last_game.id = match_relic_id;
                     }
                 }
                 6 => {
                     if let Some(last_game) = self.games.last_mut() {
+                        // Get game ending status
                         match match_group.captures.get(1) {
                             Some(capture) => match capture.as_str() {
                                 "Game over" => {
@@ -241,17 +252,31 @@ impl LogfileGameList {
                                     last_game.aborted = true;
                                     last_game.complete = true;
                                 }
+                                // Unknown status - defaulting to a cancelled and complete game
                                 unknown_status => {
-                                    panic!("Unknown game ending status: {}", unknown_status)
+                                    last_game.aborted = true;
+                                    last_game.complete = true;
                                 }
                             },
-                            None => panic!("Could not determine whether game was aborted or not"),
+                            // Could not find the game ending status information - defaulting to a
+                            // cancelled and complete game
+                            None => {
+                                last_game.aborted = true;
+                                last_game.complete = true;
+                            }
                         }
                     }
                 }
-                _ => (), // println!("Unhandled case while parsing logfile! {}", line),
+                capture_group => {
+                    return Err(ParserAppError::LogfileParseError(format!(
+                        "RegEx error while parsing logfile: {}",
+                        capture_group
+                    )))
+                }
             }
         }
+
+        Ok(())
     }
 }
 
@@ -360,7 +385,7 @@ mod tests {
         let logfilepath = Path::new("warnings2.txt");
         let mut game_list = LogfileGameList::new();
         game_list.read_logfile(logfilepath).unwrap();
-        game_list.parse();
+        game_list.parse().unwrap();
 
         assert_eq!(game_list.games.len(), 2);
         assert_eq!(game_list.games[0].players.len(), 2);
@@ -384,7 +409,7 @@ mod tests {
         let logfilepath = Path::new("warnings.txt");
         let mut game_list = LogfileGameList::new();
         game_list.read_logfile(logfilepath).unwrap();
-        game_list.parse();
+        game_list.parse().unwrap();
 
         assert_eq!(game_list.games.len(), 6);
         assert_eq!(
@@ -418,7 +443,7 @@ mod tests {
         let logfilepath = Path::new("warnings_with_observer.txt");
         let mut game_list = LogfileGameList::new();
         game_list.read_logfile(logfilepath).unwrap();
-        game_list.parse();
+        game_list.parse().unwrap();
 
         assert_eq!(game_list.games.len(), 4);
         assert_eq!(game_list.games[3].players.len(), 6);

@@ -9,10 +9,12 @@ pub enum ParserAppError {
     ParserLibError(String),
     #[error("Could not find logfile")]
     LogfileNotFoundError,
+    #[error("Error while parsing logfile: {0}")]
+    LogfileParseError(String),
     #[error("Could not find replay file")]
     ReplayNotFoundError,
     #[error("Generic error: {0}")]
-    GenericError(String)
+    GenericError(String),
 }
 
 pub type ParserAppResult<T, E = ParserAppError> = color_eyre::Result<T, E>;

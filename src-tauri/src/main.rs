@@ -29,8 +29,8 @@ fn update_game_list() -> ParserAppResult<String> {
         } = get_input_files(documentdir_path)?;
 
         let mut game_list = LogfileGameList::new();
-        game_list.read_logfile(&logfile_path).unwrap();
-        game_list.parse();
+        game_list.read_logfile(&logfile_path)?;
+        game_list.parse()?;
 
         let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
             .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
