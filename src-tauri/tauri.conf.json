@@ -7,8 +7,8 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "Elite Mod - Recent Matches",
-    "version": "0.0.1"
+    "productName": "ESL Reporter",
+    "version": "0.3.0"
   },
   "tauri": {
     "allowlist": {
@@ -33,7 +33,7 @@
     "bundle": {
       "active": true,
       "category": "DeveloperTool",
-      "copyright": "",
+      "copyright": "Mark Onyango",
       "deb": {
         "depends": []
       },
