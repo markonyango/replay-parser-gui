@@ -48,17 +48,6 @@ fn update_game_list() -> ParserAppResult<String> {
         .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
 }
 
-#[tauri::command]
-fn emit_on(app: AppHandle, window: Window) -> () {
-    println!("Received command. Sending event");
-    app.get_window("main")
-        .unwrap()
-        .emit_all("channel", "app.get_window")
-        .unwrap();
-    let res = window.emit_all("channel", "Test Nachricht von CB").unwrap();
-    println!("{:?}", res);
-    ()
-}
 
 fn main() {
     color_eyre::install().unwrap();
@@ -104,9 +93,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             parse_file,
             update_game_list,
-            emit_on
         ])
-        .plugin(TWatcher::default())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
