@@ -1,6 +1,7 @@
 import { watch, DebouncedEvent } from 'tauri-plugin-fs-watch-api';
 import { documentDir } from '@tauri-apps/api/path';
 import { invoke } from '@tauri-apps/api';
+import { appWindow } from '@tauri-apps/api/window';
 import { ReplayInfo } from './types';
 
 let stopWatching: any = null;
@@ -32,6 +33,10 @@ async function _watch() {
 }
 
 window.addEventListener('DOMContentLoaded', () => _watch());
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await appWindow.listen('channel', (event) => console.log('Event specific to window', event));
+});
 
 function handleParsedJson(json: ReplayInfo) {
 	const matchListElement = document.querySelector('#matchlist');

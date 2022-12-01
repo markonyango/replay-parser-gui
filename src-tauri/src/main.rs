@@ -9,13 +9,15 @@ use crate::core::{
     error::{ParserAppError, ParserAppResult},
     game::{ExtendedGameInformation, LogfileGameList},
 };
+use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use parser_lib::{self};
 use std::{
     fs::{self},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 use tauri::api::path::document_dir;
-use tauri_plugin_fs_watch::Watcher;
+use tauri::{AppHandle, Manager, Window};
+use tauri_plugin_fs_watch::Watcher as TWatcher;
 
 #[tauri::command]
 fn parse_file(path: &str) -> Option<String> {
@@ -46,12 +48,65 @@ fn update_game_list() -> ParserAppResult<String> {
         .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
 }
 
+#[tauri::command]
+fn emit_on(app: AppHandle, window: Window) -> () {
+    println!("Received command. Sending event");
+    app.get_window("main")
+        .unwrap()
+        .emit_all("channel", "app.get_window")
+        .unwrap();
+    let res = window.emit_all("channel", "Test Nachricht von CB").unwrap();
+    println!("{:?}", res);
+    ()
+}
+
 fn main() {
     color_eyre::install().unwrap();
 
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![parse_file, update_game_list])
-        .plugin(Watcher::default())
+        .setup(move |app| {
+            let handle = app.handle();
+
+            std::thread::spawn(move || {
+                let (tx, rx) = std::sync::mpsc::channel();
+                let mut watcher = RecommendedWatcher::new(tx, Config::default()).unwrap();
+
+                watcher
+                    .watch(&Path::new("./"), RecursiveMode::Recursive)
+                    .unwrap();
+
+                for res in rx {
+                    match res {
+                        Ok(event) => match event.kind {
+                            notify::EventKind::Modify(_) => {
+                                println!("changed; {:?}", event);
+
+                                handle
+                                    .get_window("main")
+                                    .unwrap()
+                                    .emit_all(
+                                        "channel",
+                                        format!(
+                                            "kind: {:?} - paths: {:?}",
+                                            event.kind, event.paths
+                                        ),
+                                    )
+                                    .unwrap();
+                            }
+                            _ => (),
+                        },
+                        Err(e) => println!("watch error: {:?}", e),
+                    }
+                }
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            parse_file,
+            update_game_list,
+            emit_on
+        ])
+        .plugin(TWatcher::default())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
