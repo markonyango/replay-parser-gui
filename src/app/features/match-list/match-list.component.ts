@@ -1,15 +1,14 @@
-import { Component, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { TauriService } from 'src/app/core/services/tauri.service';
 
 @Component({
   selector: 'app-match-list',
   templateUrl: './match-list.component.html',
-  styleUrls: ['./match-list.component.css']
+  styleUrls: ['./match-list.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class MatchListComponent implements OnInit {
+export class MatchListComponent {
+  matchList$ = this._matchListService.matchList$;
 
-  constructor() { }
-
-  ngOnInit(): void {
-  }
-
+  public constructor(private _matchListService: TauriService) {}
 }

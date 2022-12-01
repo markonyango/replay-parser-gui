@@ -16,8 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tauri::api::path::document_dir;
-use tauri::{AppHandle, Manager, Window};
-use tauri_plugin_fs_watch::Watcher as TWatcher;
+use tauri::{Manager};
 
 #[tauri::command]
 fn parse_file(path: &str) -> Option<String> {
@@ -25,7 +24,6 @@ fn parse_file(path: &str) -> Option<String> {
     parser_lib::parse_file(file_path)
 }
 
-#[tauri::command]
 fn update_game_list() -> ParserAppResult<String> {
     let InputFiles {
         replay_file_path,
@@ -48,7 +46,6 @@ fn update_game_list() -> ParserAppResult<String> {
         .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
 }
 
-
 fn main() {
     color_eyre::install().unwrap();
 
@@ -59,30 +56,24 @@ fn main() {
             std::thread::spawn(move || {
                 let (tx, rx) = std::sync::mpsc::channel();
                 let mut watcher = RecommendedWatcher::new(tx, Config::default()).unwrap();
+                let InputFiles { replay_file_path, logfile_path: _ } = get_input_files().unwrap();
 
                 watcher
-                    .watch(&Path::new("./"), RecursiveMode::Recursive)
+                    .watch(Path::new(replay_file_path.as_os_str()), RecursiveMode::Recursive)
                     .unwrap();
 
                 for res in rx {
                     match res {
-                        Ok(event) => match event.kind {
-                            notify::EventKind::Modify(_) => {
-                                println!("changed; {:?}", event);
+                        Ok(event) => if let notify::EventKind::Modify(_) = event.kind {
+                            println!("changed; {:?}", event);
 
+                            if let Ok(replay_info) = update_game_list() {
                                 handle
                                     .get_window("main")
                                     .unwrap()
-                                    .emit_all(
-                                        "channel",
-                                        format!(
-                                            "kind: {:?} - paths: {:?}",
-                                            event.kind, event.paths
-                                        ),
-                                    )
+                                    .emit_all("new-game", replay_info)
                                     .unwrap();
                             }
-                            _ => (),
                         },
                         Err(e) => println!("watch error: {:?}", e),
                     }
@@ -90,10 +81,6 @@ fn main() {
             });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
-            parse_file,
-            update_game_list,
-        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
