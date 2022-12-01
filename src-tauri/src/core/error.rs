@@ -4,6 +4,7 @@ use serde::{Serialize, Serializer};
 
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
+#[allow(clippy::enum_variant_names)]
 pub enum ParserAppError {
     #[error("Parser lib error: {0}")]
     ParserLibError(String),
