@@ -10,7 +10,10 @@ use crate::core::{
     game::{ExtendedGameInformation, LogfileGameList},
 };
 use parser_lib::{self};
-use std::path::PathBuf;
+use std::{
+    fs::{self},
+    path::PathBuf,
+};
 use tauri::api::path::document_dir;
 use tauri_plugin_fs_watch::Watcher;
 
@@ -22,28 +25,25 @@ fn parse_file(path: &str) -> Option<String> {
 
 #[tauri::command]
 fn update_game_list() -> ParserAppResult<String> {
-    if let Some(documentdir_path) = document_dir() {
-        let InputFiles {
-            replay_file_path,
-            logfile_path,
-        } = get_input_files(documentdir_path)?;
+    let InputFiles {
+        replay_file_path,
+        logfile_path,
+    } = get_input_files()?;
 
-        let mut game_list = LogfileGameList::new();
-        game_list.read_logfile(&logfile_path)?;
-        game_list.parse()?;
+    let mut game_list = LogfileGameList::new();
+    game_list.read_logfile(&logfile_path)?;
+    game_list.parse()?;
 
-        let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
-            .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
+    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
+        .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
 
-        let result = ExtendedGameInformation::from(parsed_replay, game_list.games.last().unwrap());
+    let replay_info = ExtendedGameInformation::from(parsed_replay, game_list.games.last().unwrap());
 
-        serde_json::to_string_pretty(&result)
-            .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
-    } else {
-        return Err(ParserAppError::ParserLibError(
-            "Could not find documents directory!".into(),
-        ));
-    }
+    // Copy replay file to ESL folder
+    copy_replay_file(replay_file_path, &replay_info)?;
+
+    serde_json::to_string_pretty(&replay_info)
+        .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
 }
 
 fn main() {
@@ -60,8 +60,14 @@ struct InputFiles {
     replay_file_path: PathBuf,
     logfile_path: PathBuf,
 }
-fn get_input_files(document_dir_path: PathBuf) -> ParserAppResult<InputFiles> {
-    let mut game_path = document_dir_path;
+fn get_input_files() -> ParserAppResult<InputFiles> {
+    let Some(documentdir_path) = document_dir() else {
+        return Err(ParserAppError::ParserLibError(
+            "Could not find documents directory!".into(),
+        ));
+    };
+
+    let mut game_path = documentdir_path;
     game_path.push("My Games");
     game_path.push("Dawn of War II - Retribution");
 
@@ -87,10 +93,29 @@ fn get_input_files(document_dir_path: PathBuf) -> ParserAppResult<InputFiles> {
     })
 }
 
+fn copy_replay_file(
+    replay_file_path: PathBuf,
+    replay_info: &ExtendedGameInformation,
+) -> ParserAppResult<()> {
+    let mut file_name = replay_file_path.clone();
+    let map_name = replay_info.map.path.replace("DATA:maps\\pvp\\", "");
+
+    file_name.set_file_name(format!("{}_{}.rec", replay_info.id, map_name));
+
+    let Ok(_) = fs::copy(replay_file_path, file_name) else {
+        return Err(ParserAppError::ParserLibError("Could not copy replay file".into()));
+    };
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn merged_replay_json_is_correct() {
         // Mock Documents folder to be our test folder so we can control
@@ -108,5 +133,26 @@ mod tests {
         assert!(games.contains("Venniie"));
         assert!(games.contains("[SB]Odium"));
         assert!(games.contains("Morgan MLGman"));
+    }
+
+    #[test]
+    fn can_copy_replay_file() {
+        let replay_info = ExtendedGameInformation {
+            id: 1234,
+            map: parser_lib::chunky::Map {
+                path: "DATA:maps\\pvp\\6p_estia".into(),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let replay_file_path = Path::new("3v3.rec");
+
+        let result = copy_replay_file(replay_file_path.into(), &replay_info);
+
+        let removed = fs::remove_file("1234_6p_estia.rec");
+
+        assert!(result.is_ok());
+        assert!(removed.is_ok());
     }
 }

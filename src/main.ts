@@ -14,10 +14,7 @@ function updateResponse(returnValue: DebouncedEvent) {
 		// 	.then(handleParsedJson)
 		// 	.catch(console.error);
 
-		invoke<string>('update_game_list')
-			.then(JSON.parse)
-			.then(handleParsedJson)
-			.catch(console.error);
+		invoke<string>('update_game_list').then(JSON.parse).then(handleParsedJson).catch(console.error);
 	}
 }
 
