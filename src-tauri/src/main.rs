@@ -18,7 +18,7 @@ use std::{
 use tauri::api::path::document_dir;
 use tauri::Manager;
 
-fn update_game_list() -> ParserAppResult<String> {
+fn update_game_list() -> ParserAppResult<ExtendedGameInformation> {
     let InputFiles {
         replay_file_path,
         logfile_path,
@@ -31,13 +31,10 @@ fn update_game_list() -> ParserAppResult<String> {
     let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
         .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
 
-    let replay_info = ExtendedGameInformation::from(parsed_replay, game_list.games.last().unwrap());
-
-    // Copy replay file to ESL folder
-    copy_replay_file(replay_file_path, &replay_info)?;
-
-    serde_json::to_string_pretty(&replay_info)
-        .map_err(|error| ParserAppError::ParserLibError(error.to_string()))
+    Ok(ExtendedGameInformation::from(
+        parsed_replay,
+        game_list.games.last().unwrap(),
+    ))
 }
 
 fn main() {
@@ -62,7 +59,13 @@ fn main() {
                     match res?.kind {
                         notify::EventKind::Modify(_) => {
                             let replay_info = update_game_list()?;
-                            main_window_handle.emit_all("new-game", replay_info)?;
+                            
+                            // Copy replay file to ESL folder
+                            copy_replay_file(&replay_file_path, &replay_info)?;
+
+                            let json = serde_json::to_string_pretty(&replay_info)?;
+
+                            main_window_handle.emit_all("new-game", json)?;
                         },
                         _ => (),
                     }
@@ -115,7 +118,7 @@ fn get_input_files() -> ParserAppResult<InputFiles> {
 }
 
 fn copy_replay_file(
-    replay_file_path: PathBuf,
+    replay_file_path: &PathBuf,
     replay_info: &ExtendedGameInformation,
 ) -> ParserAppResult<()> {
     let mut file_name = replay_file_path.clone();
@@ -143,10 +146,13 @@ mod tests {
         // game files content
         std::env::set_var("HOME", "./test");
 
-        let game_list = update_game_list();
-        assert!(game_list.is_ok());
+        let replay_info = update_game_list();
+        assert!(replay_info.is_ok());
 
-        let games = game_list.unwrap();
+        let replay_info = replay_info.unwrap();
+
+        let games = serde_json::to_string_pretty(&replay_info).unwrap();
+
 
         assert!(games.contains("Raubritter"));
         assert!(games.contains("JamezNunes"));
@@ -169,7 +175,7 @@ mod tests {
 
         let replay_file_path = Path::new("3v3.rec");
 
-        let result = copy_replay_file(replay_file_path.into(), &replay_info);
+        let result = copy_replay_file(&replay_file_path.into(), &replay_info);
 
         let removed = fs::remove_file("1234_6p_estia.rec");
 

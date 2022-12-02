@@ -52,3 +52,9 @@ impl From<tauri::Error> for ParserAppError {
         ParserAppError::GenericError(e.to_string())
     }
 }
+
+impl From<serde_json::Error> for ParserAppError {
+    fn from(e: serde_json::Error) -> Self {
+        ParserAppError::GenericError(e.to_string())
+    }
+}
