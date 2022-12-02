@@ -16,13 +16,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tauri::api::path::document_dir;
-use tauri::{Manager};
-
-#[tauri::command]
-fn parse_file(path: &str) -> Option<String> {
-    let file_path = path.to_string();
-    parser_lib::parse_file(file_path)
-}
+use tauri::Manager;
 
 fn update_game_list() -> ParserAppResult<String> {
     let InputFiles {
@@ -53,32 +47,30 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle();
 
-            std::thread::spawn(move || {
-                let (tx, rx) = std::sync::mpsc::channel();
-                let mut watcher = RecommendedWatcher::new(tx, Config::default()).unwrap();
-                let InputFiles { replay_file_path, logfile_path: _ } = get_input_files().unwrap();
+            std::thread::spawn(move || -> ParserAppResult<()> {
+                let Some(main_window_handle) = handle.get_window("main") else {
+                    return Err(ParserAppError::GenericError("Could not acquire main window handle. This is unrecoverable".into()));
+                };
 
-                watcher
-                    .watch(Path::new(replay_file_path.as_os_str()), RecursiveMode::Recursive)
-                    .unwrap();
+                let (tx, rx) = std::sync::mpsc::channel();
+                let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
+                let InputFiles { replay_file_path, logfile_path: _ } = get_input_files()?;
+
+                watcher.watch(Path::new(replay_file_path.as_os_str()), RecursiveMode::Recursive)?;
 
                 for res in rx {
-                    match res {
-                        Ok(event) => if let notify::EventKind::Modify(_) = event.kind {
-                            println!("changed; {:?}", event);
-
-                            if let Ok(replay_info) = update_game_list() {
-                                handle
-                                    .get_window("main")
-                                    .unwrap()
-                                    .emit_all("new-game", replay_info)
-                                    .unwrap();
-                            }
+                    match res?.kind {
+                        notify::EventKind::Modify(_) => {
+                            let replay_info = update_game_list()?;
+                            main_window_handle.emit_all("new-game", replay_info)?;
                         },
-                        Err(e) => println!("watch error: {:?}", e),
+                        _ => (),
                     }
                 }
+
+                Ok(())
             });
+
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -40,3 +40,15 @@ impl From<FromUtf8Error> for ParserAppError {
         ParserAppError::GenericError(e.to_string())
     }
 }
+
+impl From<notify::Error> for ParserAppError {
+    fn from(e: notify::Error) -> Self {
+        ParserAppError::GenericError(e.to_string())
+    }
+}
+
+impl From<tauri::Error> for ParserAppError {
+    fn from(e: tauri::Error) -> Self {
+        ParserAppError::GenericError(e.to_string())
+    }
+}
