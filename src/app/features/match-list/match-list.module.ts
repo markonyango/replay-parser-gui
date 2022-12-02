@@ -5,11 +5,12 @@ import { MatTableModule } from '@angular/material/table';
 import { MatchListComponent } from './match-list.component';
 import { MatchListTableComponent } from './match-list-table/match-list-table.component';
 import { PushModule } from '@rx-angular/template';
+import { MatchListRoutingModule } from './match-list-routing.module';
 
 
 @NgModule({
   declarations: [MatchListComponent, MatchListTableComponent],
-  imports: [CommonModule, MatTableModule, PushModule],
+  imports: [CommonModule, MatchListRoutingModule, MatTableModule, PushModule],
   exports: [MatchListComponent],
 })
 export class MatchListModule {}
