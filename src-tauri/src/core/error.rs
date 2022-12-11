@@ -58,3 +58,15 @@ impl From<serde_json::Error> for ParserAppError {
         ParserAppError::GenericError(e.to_string())
     }
 }
+
+impl From<reqwest::Error> for ParserAppError {
+    fn from(e: reqwest::Error) -> Self {
+        ParserAppError::GenericError(e.to_string())
+    }
+}
+
+impl From<Vec<notify::Error>> for ParserAppError {
+    fn from(_: Vec<notify::Error>) -> Self {
+        ParserAppError::GenericError("Notify error".into())
+    }
+}

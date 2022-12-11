@@ -28,20 +28,25 @@ pub enum LogfilePlayerStatus {
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct LogfilePlayerInfo {
-    sim_id: usize,
-    race: usize,
-    team_id: usize,
-    status: LogfilePlayerStatus,
+    pub sim_id: usize,
+    pub race: usize,
+    pub team_id: usize,
+    pub relic_id: usize,
+    pub steam_id: usize,
+    pub slot: usize,
+    pub status: LogfilePlayerStatus,
 }
 
 #[derive(Clone, Default, Debug, Deserialize, Serialize)]
 pub struct ExtendedPlayerInformation {
+    pub slot: usize,
+    pub steam_id: usize,
     pub sim_id: usize,
     pub status: LogfilePlayerStatus,
     pub name: String,
     pub kind: u32,
     pub team: u32,
-    pub race: String,
+    pub race: usize,
     pub relic_id: u64,
     pub rank: u32,
     pub cpu: u32,
@@ -86,6 +91,7 @@ impl LogfilePlayerInfo {
             self.sim_id = captures.get(1).map_or(0, convert_match_to_int);
             self.race = captures.get(2).map_or(0, convert_match_to_int);
             self.team_id = captures.get(3).map_or(0, convert_match_to_int);
+            self.relic_id = captures.get(4).map_or(0, convert_match_to_int);
             self.status = captures
                 .get(5)
                 .map_or(LogfilePlayerStatus::Unknown, convert_match_to_status);
@@ -96,12 +102,14 @@ impl LogfilePlayerInfo {
 impl ExtendedPlayerInformation {
     pub fn from(logfile_player: &LogfilePlayerInfo, replayfile_player: &chunky::Player) -> Self {
         Self {
+            slot: logfile_player.slot,
+            steam_id: logfile_player.steam_id,
             sim_id: logfile_player.get_sim_id(),
             status: logfile_player.get_status().clone(),
             name: replayfile_player.name.clone(),
             kind: replayfile_player.kind,
             team: replayfile_player.team,
-            race: replayfile_player.race.clone(),
+            race: logfile_player.race,
             relic_id: replayfile_player.relic_id,
             rank: replayfile_player.rank,
             cpu: replayfile_player.cpu,

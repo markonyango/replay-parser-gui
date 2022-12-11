@@ -24,6 +24,9 @@ encoding_rs = "0.8.11"
 lazy_static = "1.4.0"
 thiserror = "1.0.37"
 notify = "5.0.0"
+reqwest = { version = "0.11.13", features = ["blocking", "json"] }
+notify-debouncer-mini = "0.2.1"
+base64 = "0.13.1"
 
 [dependencies.parser_lib]
 git = "https://github.com/dowmechanicus/ReplayParser"

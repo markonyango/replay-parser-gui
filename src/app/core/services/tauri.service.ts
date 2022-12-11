@@ -32,7 +32,7 @@ export class TauriService {
           players: replay.players.map((player) => player.name).join(', '),
           map: replay.map.path.replace('DATA:maps\\pvp\\', ''),
           duration: ticks2time(replay.ticks),
-          status: null,
+          status: replay.status,
           played_at: replay.date,
         }))
       )
