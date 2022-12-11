@@ -11,7 +11,7 @@ use parser_lib::{
 };
 use regex::{Captures, Regex, RegexSet};
 use serde::{Deserialize, Serialize};
-use std::{error, fs::File, io::Read, path::Path};
+use std::{collections::HashMap, error, fs::File, io::Read, path::Path};
 use thiserror::Error;
 
 use crate::core::error::ParserAppError;
@@ -21,7 +21,7 @@ use super::{
     player_info::{ExtendedPlayerInformation, LogfilePlayerInfo},
 };
 
-const MATCH_BLOCK_PATTERNS: [&str; 7] = [
+const MATCH_BLOCK_PATTERNS: [&str; 9] = [
     r"Match Started - \[\d+:(.+) /steam/(\d+)\], slot =\D+(\d)",
     r"Beginning mission (.+) \((\d) Humans, (\d) Computers\)",
     r"GAME -- Frame",
@@ -29,6 +29,8 @@ const MATCH_BLOCK_PATTERNS: [&str; 7] = [
     r"SimID:(\d+), raceID:(\d+), teamID:(\d+), uid:\[\d+:(.+)\]",
     r"ReportSimStats - storing simulation results for match \d:(\d+)",
     r"Ending mission - '(\D+)'",
+    r"Game Over at frame (\d+)",
+    r"pid 0:(\d+), /steam/(\d+)",
 ];
 
 lazy_static! {
@@ -40,6 +42,8 @@ lazy_static! {
         r"ReportMatchStatsForPVP - SimID",
         r"PlayerInfo",
         r"Match Started",
+        r"MOD -- Game Over at frame",
+        r"LoadArbitrator::UpdateLoadProgress - info",
     ])
     .unwrap();
     static ref GAME_START_REGEXP: RegexSet = RegexSet::new(MATCH_BLOCK_PATTERNS).unwrap();
@@ -74,6 +78,9 @@ pub struct ExtendedGameInformation {
     pub aborted: bool,
     pub frames: usize,
     pub ended_at: String,
+    pub status: Option<bool>,
+    pub dev: Option<bool>,
+    pub replay: Option<String>,
 }
 
 #[derive(Debug, Default, Serialize)]
@@ -123,6 +130,13 @@ impl GameInfo {
 #[error("{0}")]
 pub struct LogfileNotFoundError(String);
 
+#[derive(Debug, Default)]
+pub struct SteamIdMap {
+    relic_id: usize,
+    slot: usize,
+    uid: String, // Game internal user id per player that is assigned when the match starts. Will be used to identify dropped players.
+}
+
 impl LogfileGameList {
     pub fn new() -> Self {
         Self::default()
@@ -161,6 +175,8 @@ impl LogfileGameList {
             .map(|pat| Regex::new(pat).unwrap())
             .collect::<Vec<_>>();
 
+        let mut match_header: HashMap<usize, SteamIdMap> = HashMap::new();
+
         for line in self.logfile_content.iter() {
             let matches = GAME_START_REGEXP.matches(line);
             let match_captures = matches
@@ -183,15 +199,43 @@ impl LogfileGameList {
             }
 
             let match_group = &match_captures[0];
+
             match match_group.index {
-                0 | 2 => (),
+                0 => {
+                    let Some(uid) = match_group.captures.get(1) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse user id from match header block".into()));
+                    };
+
+                    let Some(steam_id) = match_group.captures.get(2) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse steam id from match header block".into()));
+                    };
+
+                    let Some(slot) = match_group.captures.get(3) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse slot number from match header block".into()));
+                    };
+
+                    let uid = uid.as_str().into();
+                    let steam_id = steam_id.as_str().parse::<usize>().unwrap();
+                    let slot = slot.as_str().parse::<usize>().unwrap();
+
+                    match_header.insert(
+                        steam_id,
+                        SteamIdMap {
+                            relic_id: 0,
+                            slot,
+                            uid,
+                        },
+                    );
+                }
                 1 => {
                     // Is there any game in the list to begin with
                     if let Some(last_game) = self.games.last_mut() {
                         // We can't know whether game block was created with capture index 0 or 1
                         // -> check if last game block is complete, i.e. Ending mission was read
                         match last_game.block_complete() {
-                            true => self.games.push(LogfileGameInfo::new()),
+                            true => {
+                                self.games.push(LogfileGameInfo::new());
+                            }
                             false => (),
                         }
                     } else {
@@ -206,10 +250,24 @@ impl LogfileGameList {
                     let len = self.games.len() - 1;
                     self.games[len].map = map.as_str().to_string();
                 }
+                2 => (),
                 3 => {
                     if let Some(last_game) = self.games.last_mut() {
                         let mut player = LogfilePlayerInfo::new();
                         player.parse(&match_group.captures, false);
+
+                        // Add slot number and steam id from hashmap
+                        let steam_id = match_header.iter().find_map(|(key, val)| {
+                            if val.relic_id == player.relic_id {
+                                Some(key)
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(steam_id) = steam_id {
+                            player.steam_id = *steam_id;
+                            player.slot = match_header.get(steam_id).unwrap().slot;
+                        }
 
                         if let Some(last_game) = self.games.last_mut() {
                             last_game.players.push(player);
@@ -220,6 +278,23 @@ impl LogfileGameList {
                     if let Some(last_game) = self.games.last_mut() {
                         let mut player = LogfilePlayerInfo::new();
                         player.parse(&match_group.captures, true);
+
+                        // This match result line does not contain the players relic id but his game internal user id
+                        let uid = match_group.captures.get(4).unwrap().as_str().to_string();
+
+                        // Add slot number and steam id from hashmap
+                        let steam_id = match_header.iter().find_map(|(key, val)| {
+                            if val.uid == uid {
+                                Some(key)
+                            } else {
+                                None
+                            }
+                        });
+                        if let Some(steam_id) = steam_id {
+                            player.steam_id = *steam_id;
+                            player.slot = match_header.get(steam_id).unwrap().slot;
+                            player.relic_id = match_header.get(steam_id).unwrap().relic_id;
+                        }
 
                         if let Some(last_game) = self.games.last_mut() {
                             last_game.players.push(player);
@@ -267,6 +342,43 @@ impl LogfileGameList {
                         }
                     }
                 }
+                7 => {
+                    if let Some(last_game) = self.games.last_mut() {
+                        let Some(frames) = match_group.captures.get(1) else {
+                            return Err(ParserAppError::LogfileParseError("Could not extract number of frames from logfile".into()));
+                        };
+
+                        let Ok(frames) = frames.as_str().parse::<usize>() else {
+                            return Err(ParserAppError::LogfileParseError("Could not parse number of frames from logfile".into()));
+                        };
+
+                        last_game.frames = frames;
+                    }
+                }
+                8 => {
+                    let Some(relic_id) = match_group.captures.get(1) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse relic id from log file".into()));
+                    };
+
+                    let Some(steam_id) = match_group.captures.get(2) else {
+                        return Err(ParserAppError::LogfileParseError("Could not parse steam if from log file".into()));
+                    };
+
+                    let steam_id = steam_id.as_str().parse::<usize>().unwrap();
+                    let relic_id = relic_id.as_str().parse::<usize>().unwrap();
+
+                    if let Some(info) = match_header.get_mut(&steam_id) {
+                        info.relic_id = relic_id;
+                    } else {
+                        match_header.insert(
+                            steam_id,
+                            SteamIdMap {
+                                relic_id,
+                                ..Default::default()
+                            },
+                        );
+                    }
+                }
                 capture_group => {
                     return Err(ParserAppError::LogfileParseError(format!(
                         "RegEx error while parsing logfile: {}",
@@ -291,17 +403,18 @@ impl ExtendedGameInformation {
             .iter()
             .enumerate()
             .map(|(index, replayfile_player)| {
-                let logfile_player = parsed_logfile_game.players.get(index).unwrap();
+                let logfile_player = parsed_logfile_game.players.get(index);
 
                 let _player = match replayfile_player {
                     parser_lib::chunky::Chunk::Player(player) => Some(player),
                     _ => None,
                 };
 
-                if let Some(player) = _player {
-                    ExtendedPlayerInformation::from(logfile_player, player)
-                } else {
-                    ExtendedPlayerInformation::default()
+                match (logfile_player, _player) {
+                    (Some(logfile_player), Some(player)) => {
+                        ExtendedPlayerInformation::from(logfile_player, player)
+                    }
+                    _ => ExtendedPlayerInformation::default(),
                 }
             })
             .collect::<Vec<_>>();
@@ -351,6 +464,9 @@ impl ExtendedGameInformation {
             md5: parsed_replay.md5,
             date: parsed_replay.date.clone(),
             ticks: parsed_replay.ticks as usize,
+            status: None,
+            dev: None,
+            replay: None,
             game,
         }
     }
@@ -377,7 +493,7 @@ mod tests {
         let mut game_list = LogfileGameList::new();
         game_list.read_logfile(logfilepath).unwrap();
 
-        assert_eq!(game_list.logfile_content.len(), 67);
+        assert_eq!(game_list.logfile_content.len(), 240);
     }
 
     #[test]
@@ -471,5 +587,20 @@ mod tests {
             *game_list.games[3].players[5].get_status(),
             LogfilePlayerStatus::Conceded
         );
+    }
+
+    #[test]
+    fn can_parse_relic_and_steam_id() {
+        let logfilepath = Path::new("warnings3.txt");
+        let mut game_list = LogfileGameList::new();
+        game_list.read_logfile(logfilepath).unwrap();
+        game_list.parse().unwrap();
+
+        assert!(game_list.games[0].players[0].relic_id != 0);
+        assert!(game_list.games[0].players[0].steam_id != 0);
+        assert_eq!(game_list.games[0].players[0].slot, 0);
+        assert!(game_list.games[0].players[1].relic_id != 0);
+        assert!(game_list.games[0].players[1].steam_id != 0);
+        assert_eq!(game_list.games[0].players[1].slot, 1);
     }
 }

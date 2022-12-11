@@ -1,18 +1,19 @@
 export type ReplayInfo = {
-  id: number,
-  name: string,
-  mod_chksum: number,
-  mod_version: number,
-  md5: string,
-  date: string,
-  ticks: number,
-  game: GameInfo,
-  map: MapInfo,
-  players: Array<PlayerInfo>
-  observers: Array<ObserverInfo>,
-  messages: Array<MessageInfo>,
-  actions: Array<ActionInfo>
-}
+  id: number;
+  name: string;
+  mod_chksum: number;
+  mod_version: number;
+  md5: string;
+  date: string;
+  ticks: number;
+  game: GameInfo;
+  map: MapInfo;
+  status: string;
+  players: Array<PlayerInfo>;
+  observers: Array<ObserverInfo>;
+  messages: Array<MessageInfo>;
+  actions: Array<ActionInfo>;
+};
 
 type GameInfo = {
   name: string,
