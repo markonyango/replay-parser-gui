@@ -8,63 +8,68 @@ export type ReplayInfo = {
   ticks: number;
   game: GameInfo;
   map: MapInfo;
+  aborted: boolean;
   status: string;
   players: Array<PlayerInfo>;
-  observers: Array<ObserverInfo>;
   messages: Array<MessageInfo>;
   actions: Array<ActionInfo>;
+  observers?: Array<ObserverInfo>;
 };
 
-type GameInfo = {
-  name: string,
-  mode: string,
-  resources: string,
-  locations: string,
-  victory_points: number,
+export type GameInfo = {
+  name: string;
+  mode: string;
+  resources: string;
+  locations: string;
+  victory_points: number;
 };
 
-type MapInfo = {
-  name: string,
-  description: string,
-  abbrname: string,
-  maxplayers: number,
-  path: string,
-  date: string,
-  width: number,
-  height: number,
+export type MapInfo = {
+  name: string;
+  description: string;
+  abbrname: string;
+  maxplayers: number;
+  path: string;
+  date: string;
+  width: number;
+  height: number;
 };
 
-type PlayerInfo = {
-  name: string,
-  kind: number,
-  team: number,
-  race: string,
-  relic_id: number,
-  rank: number,
-  cpu: number,
-  hero: number,
-  primary_color: number,
-  secondary_color: number,
-  trim_color: number,
-  accessory_color: number,
-  skin_path: string,
-  skin_name: string,
-  id: number,
+export type PlayerInfo = {
+  slot: number;
+  steam_id: number;
+  sim_id: number;
+  status: 'Killed' | 'Dropped' | 'Conceded' | 'Won' | 'Playing';
+  name: string;
+  kind: number;
+  team: number;
+  race: number;
+  relic_id: number;
+  rank: number;
+  cpu: number;
+  hero: number;
+  primary_color: number;
+  secondary_color: number;
+  trim_color: number;
+  accessory_color: number;
+  skin_path: string;
+  skin_name: string;
+  id: number;
 };
 
-type ObserverInfo = unknown;
+export type ObserverInfo = unknown;
 
-type MessageInfo = {
-  tick: number,
-  sender: string,
-  receiver: string,
-  body: string,
-  player_id: number,
+export type MessageInfo = {
+  tick: number;
+  sender: string;
+  receiver: string;
+  body: string;
+  player_id: number;
 };
 
-type ActionInfo = {
-  relic_id: number,
-  name: string,
-  tick: number,
-  data: Array<number>,
-}
+export type ActionInfo = {
+  relic_id: number;
+  name: string;
+  tick: number;
+  data: Array<number>;
+};

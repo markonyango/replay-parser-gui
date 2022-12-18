@@ -3,7 +3,7 @@
     "beforeDevCommand": "npm run web:serve",
     "beforeBuildCommand": "npm run web:prod",
     "devPath": "http://localhost:4200",
-    "distDir": "../dist",
+    "distDir": "../dist/eslreporter",
     "withGlobalTauri": true
   },
   "package": {

@@ -1,9 +1,7 @@
 import { Injectable } from '@angular/core';
 import { appWindow } from '@tauri-apps/api/window';
 import {
-  BehaviorSubject,
   distinctUntilKeyChanged,
-  Observable,
   scan,
   Subject,
 } from 'rxjs';
@@ -29,10 +27,10 @@ export class TauriService {
       map((replays) =>
         replays.map((replay) => ({
           match_id: replay.id,
-          players: replay.players.map((player) => player.name).join(', '),
-          map: replay.map.path.replace('DATA:maps\\pvp\\', ''),
+          players: replay.players,
+          map: replay.map,
           duration: ticks2time(replay.ticks),
-          status: replay.status,
+          status: JSON.parse(replay.status),
           played_at: replay.date,
         }))
       )
