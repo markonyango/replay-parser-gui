@@ -1,5 +1,6 @@
-use std::string::FromUtf8Error;
+use std::{string::FromUtf8Error, convert::Infallible};
 
+use color_eyre::Report;
 use serde::{Serialize, Serializer};
 
 #[derive(Debug, thiserror::Error)]
@@ -68,5 +69,17 @@ impl From<reqwest::Error> for ParserAppError {
 impl From<Vec<notify::Error>> for ParserAppError {
     fn from(_: Vec<notify::Error>) -> Self {
         ParserAppError::GenericError("Notify error".into())
+    }
+}
+
+impl From<Infallible> for ParserAppError {
+    fn from(e: Infallible) -> Self {
+        ParserAppError::GenericError(e.to_string())
+    }
+}
+
+impl From<Report> for ParserAppError {
+    fn from(e: Report) -> Self {
+        ParserAppError::GenericError(e.to_string())
     }
 }
