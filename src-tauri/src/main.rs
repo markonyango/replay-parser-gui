@@ -3,12 +3,17 @@
     windows_subsystem = "windows"
 )]
 
+#[macro_use]
+extern crate lazy_static;
+
 mod core;
 
 use crate::core::handle_new_game_event;
+use tracing_subscriber;
 
 fn main() {
     color_eyre::install().unwrap();
+    tracing_subscriber::fmt().init();
 
     tauri::Builder::default()
         .setup(move |app| {

@@ -78,7 +78,7 @@ pub struct ExtendedGameInformation {
     pub aborted: bool,
     pub frames: usize,
     pub ended_at: String,
-    pub status: Option<bool>,
+    pub status: String,
     pub dev: Option<bool>,
     pub replay: Option<String>,
 }
@@ -464,7 +464,7 @@ impl ExtendedGameInformation {
             md5: parsed_replay.md5,
             date: parsed_replay.date.clone(),
             ticks: parsed_replay.ticks as usize,
-            status: None,
+            status: "".into(),
             dev: None,
             replay: None,
             game,

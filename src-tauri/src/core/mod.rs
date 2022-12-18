@@ -6,11 +6,14 @@ use std::{
 
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
+use parser_lib::replay::ReplayInfo;
+use serde_json::json;
 use tauri::{api::path::document_dir, AppHandle, Manager};
+use tracing::{error, info};
 
 use self::{
     error::{ParserAppError, ParserAppResult},
-    game::{ExtendedGameInformation, LogfileGameList},
+    game::{ExtendedGameInformation, LogfileGameInfo, LogfileGameList},
     replay_reporter_dto::ReplayReportDto,
 };
 
@@ -24,55 +27,44 @@ pub struct InputFiles {
     logfile_path: PathBuf,
 }
 
-pub fn update_game_list() -> error::ParserAppResult<ExtendedGameInformation> {
-    let InputFiles {
-        replay_file_path,
-        logfile_path,
-    } = get_input_files()?;
-
+pub fn parse_logfile(logfile_path: &Path) -> error::ParserAppResult<LogfileGameInfo> {
     let mut game_list = LogfileGameList::new();
-    game_list.read_logfile(&logfile_path)?;
+    game_list.read_logfile(logfile_path)?;
     game_list.parse()?;
 
-    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_str().unwrap().to_string())
-        .map_err(|error| ParserAppError::ParserLibError(error.to_string()))?;
+    let Some(last_game) = game_list.games.last() else {
+        return Err(ParserAppError::ParserLibError("Could not get last game from list of games in logfile".into()));
+    };
 
-    Ok(ExtendedGameInformation::from(
-        parsed_replay,
-        game_list.games.last().unwrap(),
-    ))
+    Ok(last_game.to_owned())
+}
+
+fn parse_replay_file(replay_file_path: String) -> ParserAppResult<ReplayInfo> {
+    let parsed_replay = parser_lib::parse_raw(replay_file_path)?;
+    Ok(parsed_replay)
+}
+
+lazy_static! {
+    static ref PLAYBACK_PATH: PathBuf = document_dir()
+        .unwrap()
+        .join(r"My Games\Dawn of War II - Retribution\Playback\temp.rec");
+    static ref LOGFILE_PATH: PathBuf = document_dir()
+        .unwrap()
+        .join(r"My Games\Dawn of War II - Retribution\Logfiles\warnings.txt");
 }
 
 pub fn get_input_files() -> ParserAppResult<InputFiles> {
-    let Some(documentdir_path) = document_dir() else {
-        return Err(ParserAppError::ParserLibError(
-            "Could not find documents directory!".into(),
-        ));
-    };
-
-    let mut game_path = documentdir_path;
-    game_path.push("My Games");
-    game_path.push("Dawn of War II - Retribution");
-
-    let mut logfile_path = game_path.clone();
-    logfile_path.push("Logfiles");
-    logfile_path.push("warnings.txt");
-
-    let mut replay_file_path = game_path.clone();
-    replay_file_path.push("Playback");
-    replay_file_path.push("temp.rec");
-
-    if !logfile_path.exists() {
+    if !(*LOGFILE_PATH).exists() {
         return Err(ParserAppError::LogfileNotFoundError);
     }
 
-    if !replay_file_path.exists() {
+    if !(*PLAYBACK_PATH).exists() {
         return Err(ParserAppError::ReplayNotFoundError);
     }
 
     Ok(InputFiles {
-        replay_file_path,
-        logfile_path,
+        replay_file_path: (*PLAYBACK_PATH).to_path_buf(),
+        logfile_path: (*LOGFILE_PATH).to_path_buf(),
     })
 }
 
@@ -92,21 +84,35 @@ pub fn copy_replay_file(
     Ok(())
 }
 
-pub fn send_replay_to_server(
-    replay_info: &ExtendedGameInformation,
-) -> ParserAppResult<reqwest::blocking::Response> {
+pub fn send_replay_to_server(replay_info: &mut ExtendedGameInformation) -> ParserAppResult<()> {
     let client = reqwest::blocking::Client::new();
 
     let dto = ReplayReportDto::from(replay_info);
 
     let request = client
-        .post("http://dawnofwar.info/esl/esl-report.php")
+        .post("http://127.0.0.1:8080/replay")
+        //.post("http://dawnofwar.info/esl/esl-report.php")
         .json(&dto)
         .build()?;
 
     match client.execute(request) {
-        Ok(response) => Ok(response),
-        Err(err) => Err(ParserAppError::GenericError(err.to_string())),
+        Ok(response) => {
+            let response_body = response.text();
+            info!("The response message from the server: {:?}", response_body);
+            match response_body {
+                Ok(body) if body.contains("error") => replay_info.status = body,
+                Ok(body) if !body.contains("error") => replay_info.status = body,
+                Ok(_) => replay_info.status = json!({ "response": "ok" }).to_string(),
+                Err(error) => replay_info.status = error.to_string(),
+            };
+
+            Ok(())
+        }
+        Err(err) => {
+            error!("{:?}", err.to_string());
+            replay_info.status = json!({ "error": err.to_string()}).to_string();
+            Err(ParserAppError::GenericError(err.to_string()))
+        }
     }
 }
 
@@ -125,7 +131,7 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
     // let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     let InputFiles {
         replay_file_path,
-        logfile_path: _,
+        logfile_path,
     } = get_input_files()?;
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
@@ -137,18 +143,20 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
 
     for events in rx {
         for _e in events? {
-            let mut replay_info = update_game_list()?;
+            let logfile_game_info = parse_logfile(&logfile_path)?;
+            let replay_file_info =
+                parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
+            let mut replay_info =
+                ExtendedGameInformation::from(replay_file_info, &logfile_game_info);
 
             // Copy replay file to ESL folder
             copy_replay_file(&replay_file_path, &replay_info)?;
 
             replay_info.replay = transform_replay_to_base64(&replay_file_path).ok();
 
-            let server_response = send_replay_to_server(&replay_info)?;
+            send_replay_to_server(&mut replay_info)?;
 
             replay_info.replay = None;
-
-            replay_info.status = Some(server_response.status().is_success());
 
             let json = serde_json::to_string_pretty(&replay_info)?;
             main_window_handle.emit_all("new-game", json)?;
@@ -173,7 +181,7 @@ mod tests {
         // game files content
         std::env::set_var("HOME", "./test");
 
-        let replay_info = update_game_list();
+        let replay_info = parse_logfile();
         assert!(replay_info.is_ok());
 
         let replay_info = replay_info.unwrap();
@@ -189,8 +197,18 @@ mod tests {
     }
 
     #[test]
+    fn yields_correct_game_paths() {
+        let InputFiles {
+            replay_file_path,
+            logfile_path,
+        } = get_input_files().unwrap();
+        assert!(replay_file_path.exists());
+        assert!(logfile_path.exists());
+    }
+
+    #[test]
     fn can_send_json_to_server() {
-        let replay_info = ExtendedGameInformation {
+        let mut replay_info = ExtendedGameInformation {
             dev: Some(true),
             replay: Some("ABC".into()),
             status: Some(true),
@@ -226,7 +244,7 @@ mod tests {
             ended_at: "".into(),
         };
 
-        let res = send_replay_to_server(&replay_info);
+        let res = send_replay_to_server(&mut replay_info);
         assert!(res.unwrap().status().is_success());
     }
 
