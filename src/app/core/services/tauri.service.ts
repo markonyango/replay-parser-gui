@@ -25,14 +25,23 @@ export class TauriService {
 
     this.matchList$ = this._replays$.pipe(
       map((replays) =>
-        replays.map((replay) => ({
-          match_id: replay.id,
-          players: replay.players,
-          map: replay.map,
-          duration: ticks2time(replay.ticks),
-          status: JSON.parse(replay.status),
-          played_at: replay.date,
-        }))
+        replays.map((replay) => {
+          let status;
+          try {
+            status = JSON.parse(replay.status);
+          } catch(error) {
+            status = { error: replay.status }
+          }
+
+          return {
+            match_id: replay.id,
+            players: replay.players,
+            map: replay.map,
+            duration: ticks2time(replay.ticks),
+            status,
+            played_at: replay.date,
+          };
+        })
       )
     );
 
@@ -49,7 +58,6 @@ function ticks2time(ticks: number) {
   const minutes = Math.floor(total_seconds / 60);
   const remaining_seconds = total_seconds - minutes * 60;
 
-  return `${minutes < 10 ? '0' + minutes : minutes}:${
-    remaining_seconds < 10 ? '0' + remaining_seconds : remaining_seconds
-  }`;
+  return `${minutes < 10 ? '0' + minutes : minutes}:${remaining_seconds < 10 ? '0' + remaining_seconds : remaining_seconds
+    }`;
 }
