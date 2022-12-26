@@ -1,4 +1,4 @@
-use std::{string::FromUtf8Error, convert::Infallible};
+use std::{convert::Infallible, string::FromUtf8Error};
 
 use color_eyre::Report;
 use serde::{Serialize, Serializer};

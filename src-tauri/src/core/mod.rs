@@ -13,12 +13,14 @@ use tracing::{error, info};
 
 use self::{
     error::{ParserAppError, ParserAppResult},
-    game::{ExtendedGameInformation, LogfileGameInfo, LogfileGameList},
+    game::ExtendedGameInformation,
+    logfile::{LogfileGameInfo, LogfileGameList},
     replay_reporter_dto::ReplayReportDto,
 };
 
 pub mod error;
 pub mod game;
+mod logfile;
 pub mod player_info;
 mod replay_reporter_dto;
 
@@ -68,60 +70,6 @@ pub fn get_input_files() -> ParserAppResult<InputFiles> {
     })
 }
 
-pub fn copy_replay_file(
-    replay_file_path: &PathBuf,
-    replay_info: &ExtendedGameInformation,
-) -> ParserAppResult<()> {
-    let mut file_name = replay_file_path.clone();
-    let map_name = replay_info.map.path.replace("DATA:maps\\pvp\\", "");
-
-    file_name.set_file_name(format!("{}_{}.rec", replay_info.id, map_name));
-
-    let Ok(_) = fs::copy(replay_file_path, file_name) else {
-        return Err(ParserAppError::ParserLibError("Could not copy replay file".into()));
-    };
-
-    Ok(())
-}
-
-pub fn send_replay_to_server(replay_info: &mut ExtendedGameInformation) -> ParserAppResult<()> {
-    let client = reqwest::blocking::Client::new();
-
-    let dto = ReplayReportDto::from(replay_info);
-
-    let request = client
-        .post("http://127.0.0.1:8080/replay")
-        //.post("http://dawnofwar.info/esl/esl-report.php")
-        .json(&dto)
-        .build()?;
-
-    match client.execute(request) {
-        Ok(response) => {
-            let response_body = response.text();
-            info!("The response message from the server: {:?}", response_body);
-            match response_body {
-                Ok(body) if body.contains("error") => replay_info.status = body,
-                Ok(body) if !body.contains("error") => replay_info.status = body,
-                Ok(_) => replay_info.status = json!({ "response": "ok" }).to_string(),
-                Err(error) => replay_info.status = error.to_string(),
-            };
-
-            Ok(())
-        }
-        Err(err) => {
-            error!("{:?}", err.to_string());
-            replay_info.status = json!({ "error": err.to_string()}).to_string();
-            Err(ParserAppError::GenericError(err.to_string()))
-        }
-    }
-}
-
-fn transform_replay_to_base64(replay_file_path: &PathBuf) -> ParserAppResult<String> {
-    let bytes = fs::read(replay_file_path)?;
-
-    Ok(base64::encode(bytes))
-}
-
 pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
     let Some(main_window_handle) = handle.get_window("main") else {
                     return Err(ParserAppError::GenericError("Could not acquire main window handle. This is unrecoverable".into()));
@@ -143,23 +91,30 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
 
     for events in rx {
         for _e in events? {
+            tracing::debug!("Received a replay file notify event");
             let logfile_game_info = parse_logfile(&logfile_path)?;
             let replay_file_info =
                 parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
-            let mut replay_info =
-                ExtendedGameInformation::from(replay_file_info, &logfile_game_info);
+            
+            let mut replay_info = ExtendedGameInformation::new();
+            replay_info
+                .from(replay_file_info, &logfile_game_info)
+                .copy_replay_file(&replay_file_path)?
+                .transform_replay_to_base64(&replay_file_path)?
+                .send_replay_to_server()?
+                .notify_main_window(&main_window_handle)?;
 
             // Copy replay file to ESL folder
-            copy_replay_file(&replay_file_path, &replay_info)?;
+            // copy_replay_file(&replay_file_path, &replay_info)?;
 
-            replay_info.replay = transform_replay_to_base64(&replay_file_path).ok();
+            // replay_info.replay = transform_replay_to_base64(&replay_file_path).ok();
 
-            send_replay_to_server(&mut replay_info)?;
+            // send_replay_to_server(&mut replay_info)?;
 
-            replay_info.replay = None;
+            // replay_info.replay = None;
 
-            let json = serde_json::to_string_pretty(&replay_info)?;
-            main_window_handle.emit_all("new-game", json)?;
+            // let json = serde_json::to_string_pretty(&replay_info)?;
+            // main_window_handle.emit_all("new-game", json)?;
         }
     }
 
@@ -211,7 +166,7 @@ mod tests {
         let mut replay_info = ExtendedGameInformation {
             dev: Some(true),
             replay: Some("ABC".into()),
-            status: Some(true),
+            status: "ok".into(),
             id: 1234,
             name: "".into(),
             mod_chksum: 1234,
@@ -245,7 +200,7 @@ mod tests {
         };
 
         let res = send_replay_to_server(&mut replay_info);
-        assert!(res.unwrap().status().is_success());
+        assert!(res.is_ok());
     }
 
     #[test]
