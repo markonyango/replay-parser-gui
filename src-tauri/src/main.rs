@@ -9,11 +9,11 @@ extern crate lazy_static;
 mod core;
 
 use crate::core::handle_new_game_event;
-use tracing_subscriber;
+use tracing::Level;
 
 fn main() {
     color_eyre::install().unwrap();
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt().with_max_level(Level::DEBUG).init();
 
     tauri::Builder::default()
         .setup(move |app| {
