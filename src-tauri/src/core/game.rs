@@ -176,7 +176,7 @@ impl ExtendedGameInformation {
         let dto = ReplayReportDto::from(self);
 
         let request = client
-            .post("http://127.0.0.1:8080/replay")
+            .post("http://dawnofwar.info/esl/esl-report.php")
             .json(&dto)
             .build()?;
 
@@ -215,3 +215,53 @@ impl ExtendedGameInformation {
         main_window_handle.emit_all("new-game", json)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::core::game;
+
+    use super::*;
+
+    #[test]
+    fn can_send_replay_to_server() {
+        let mut replay_info = ExtendedGameInformation {
+            dev: Some(true),
+            replay: Some("ABC".into()),
+            status: Default::default(),
+            id: 1234,
+            name: "".into(),
+            mod_chksum: 1234,
+            mod_version: 1234,
+            md5: "".into(),
+            date: "".into(),
+            ticks: 123,
+            game: game::GameInfo {
+                name: "".into(),
+                mode: "".into(),
+                resources: "".into(),
+                locations: "".into(),
+                victory_points: 500,
+            },
+            map: Map {
+                name: "todo!()".to_string(),
+                description: "todo!()".to_string(),
+                abbrname: "todo!()".to_string(),
+                maxplayers: 6,
+                path: "todo!()".to_string(),
+                date: "todo!()".to_string(),
+                width: 512,
+                height: 512,
+            },
+            players: vec![],
+            messages: vec![],
+            actions: vec![],
+            aborted: false,
+            frames: 123,
+            ended_at: "".into(),
+        };
+
+        let res = replay_info.send_replay_to_server();
+        assert!(res.is_ok());
+    }
+}
+
