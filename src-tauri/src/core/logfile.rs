@@ -9,7 +9,7 @@ use super::{
     player_info::LogfilePlayerInfo,
 };
 
-const MATCH_BLOCK_PATTERNS: [&str; 9] = [
+const MATCH_BLOCK_PATTERNS: [&str; 10] = [
     r"Match Started - \[\d+:(.+) /steam/(\d+)\], slot =\D+(\d)",
     r"Beginning mission (.+) \((\d) Humans, (\d) Computers\)",
     r"GAME -- Frame",
@@ -19,6 +19,7 @@ const MATCH_BLOCK_PATTERNS: [&str; 9] = [
     r"Ending mission - '(\D+)'",
     r"Game Over at frame (\d+)",
     r"pid 0:(\d+), /steam/(\d+)",
+    r"Found profile: /steam/(\d+)",
 ];
 
 lazy_static! {
@@ -32,6 +33,7 @@ lazy_static! {
         r"Match Started",
         r"MOD -- Game Over at frame",
         r"LoadArbitrator::UpdateLoadProgress - info",
+        r"Found profile",
     ])
     .unwrap();
     static ref GAME_START_REGEXP: RegexSet = RegexSet::new(MATCH_BLOCK_PATTERNS).unwrap();
@@ -63,6 +65,7 @@ impl LogfileGameInfo {
 pub struct LogfileGameList {
     logfile_content: Vec<String>,
     pub games: Vec<LogfileGameInfo>,
+    pub steam_id: usize,
 }
 
 #[derive(Debug, Default)]
@@ -340,6 +343,21 @@ impl LogfileGameList {
                         );
                     }
                 }
+                9 => {
+                    let Some(steam_id) = match_group.captures.get(1) else {
+                        tracing::error!("Could not find player profile steam id in logfile");
+                        return Err(ParserAppError::LogfileParseError("could not find player profile steam id in logfile".into()));
+                    };
+
+                    tracing::debug!("Found players steam profile: /steam/{:?}", steam_id);
+
+                    if let Ok(steam_id) = steam_id.as_str().parse::<usize>() {
+                        self.steam_id = steam_id;
+                    } else {
+                        tracing::error!("Could not read player profile steam id from logfile");
+                        return Err(ParserAppError::LogfileParseError("could not read player profile steam id from logfile".into()));
+                    }
+                }
                 capture_group => {
                     tracing::error!("RegEx error while parsing logfile: {:?}", capture_group);
                     return Err(ParserAppError::LogfileParseError(format!(
@@ -375,7 +393,7 @@ mod tests {
         let mut game_list = LogfileGameList::new();
         game_list.read_logfile(logfilepath).unwrap();
 
-        assert_eq!(game_list.logfile_content.len(), 240);
+        assert_eq!(game_list.logfile_content.len(), 241);
     }
 
     #[test]
@@ -484,5 +502,15 @@ mod tests {
         assert!(game_list.games[0].players[1].relic_id != 0);
         assert!(game_list.games[0].players[1].steam_id != 0);
         assert_eq!(game_list.games[0].players[1].slot, 1);
+    }
+
+    #[test]
+    fn player_steam_id_is_correctly_read_from_logfile() {
+        let logfilepath = Path::new("warnings.txt");
+        let mut game_list = LogfileGameList::new();
+        game_list.read_logfile(logfilepath).unwrap();
+        game_list.parse().unwrap();
+
+        assert_eq!(game_list.steam_id, 76561198099396483);
     }
 }
