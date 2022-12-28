@@ -1,5 +1,4 @@
 use std::{
-    fs,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -7,15 +6,12 @@ use std::{
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use parser_lib::replay::ReplayInfo;
-use serde_json::json;
 use tauri::{api::path::document_dir, AppHandle, Manager};
-use tracing::{error, info};
 
 use self::{
     error::{ParserAppError, ParserAppResult},
     game::ExtendedGameInformation,
     logfile::{LogfileGameInfo, LogfileGameList},
-    replay_reporter_dto::ReplayReportDto,
 };
 
 pub mod error;
@@ -95,7 +91,7 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
             let logfile_game_info = parse_logfile(&logfile_path)?;
             let replay_file_info =
                 parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
-            
+
             let mut replay_info = ExtendedGameInformation::new();
             replay_info
                 .from(replay_file_info, &logfile_game_info)
@@ -103,124 +99,9 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
                 .transform_replay_to_base64(&replay_file_path)?
                 .send_replay_to_server()?
                 .notify_main_window(&main_window_handle)?;
-
-            // Copy replay file to ESL folder
-            // copy_replay_file(&replay_file_path, &replay_info)?;
-
-            // replay_info.replay = transform_replay_to_base64(&replay_file_path).ok();
-
-            // send_replay_to_server(&mut replay_info)?;
-
-            // replay_info.replay = None;
-
-            // let json = serde_json::to_string_pretty(&replay_info)?;
-            // main_window_handle.emit_all("new-game", json)?;
         }
     }
 
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use std::path::Path;
-
-    use parser_lib::chunky::Map;
-
-    use super::*;
-
-    #[cfg(unix)]
-    #[test]
-    fn merged_replay_json_is_correct() {
-        // Mock Documents folder to be our test folder so we can control
-        // game files content
-        std::env::set_var("HOME", "./test");
-
-        let replay_info = parse_logfile();
-        assert!(replay_info.is_ok());
-
-        let replay_info = replay_info.unwrap();
-
-        let games = serde_json::to_string_pretty(&replay_info).unwrap();
-
-        assert!(games.contains("Raubritter"));
-        assert!(games.contains("JamezNunes"));
-        assert!(games.contains("Cerano"));
-        assert!(games.contains("Venniie"));
-        assert!(games.contains("[SB]Odium"));
-        assert!(games.contains("Morgan MLGman"));
-    }
-
-    #[test]
-    fn yields_correct_game_paths() {
-        let InputFiles {
-            replay_file_path,
-            logfile_path,
-        } = get_input_files().unwrap();
-        assert!(replay_file_path.exists());
-        assert!(logfile_path.exists());
-    }
-
-    #[test]
-    fn can_send_json_to_server() {
-        let mut replay_info = ExtendedGameInformation {
-            dev: Some(true),
-            replay: Some("ABC".into()),
-            status: "ok".into(),
-            id: 1234,
-            name: "".into(),
-            mod_chksum: 1234,
-            mod_version: 1234,
-            md5: "".into(),
-            date: "".into(),
-            ticks: 123,
-            game: game::GameInfo {
-                name: "".into(),
-                mode: "".into(),
-                resources: "".into(),
-                locations: "".into(),
-                victory_points: 500,
-            },
-            map: Map {
-                name: "todo!()".to_string(),
-                description: "todo!()".to_string(),
-                abbrname: "todo!()".to_string(),
-                maxplayers: 6,
-                path: "todo!()".to_string(),
-                date: "todo!()".to_string(),
-                width: 512,
-                height: 512,
-            },
-            players: vec![],
-            messages: vec![],
-            actions: vec![],
-            aborted: false,
-            frames: 123,
-            ended_at: "".into(),
-        };
-
-        let res = send_replay_to_server(&mut replay_info);
-        assert!(res.is_ok());
-    }
-
-    #[test]
-    fn can_copy_replay_file() {
-        let replay_info = ExtendedGameInformation {
-            id: 1234,
-            map: parser_lib::chunky::Map {
-                path: "DATA:maps\\pvp\\6p_estia".into(),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let replay_file_path = Path::new("3v3.rec");
-
-        let result = copy_replay_file(&replay_file_path.into(), &replay_info);
-
-        let removed = fs::remove_file("1234_6p_estia.rec");
-
-        assert!(result.is_ok());
-        assert!(removed.is_ok());
-    }
-}
