@@ -7,8 +7,8 @@
     "withGlobalTauri": true
   },
   "package": {
-    "productName": "ESL Reporter",
-    "version": "0.3.0"
+    "productName": "ESLReporter",
+    "version": "1.0.0"
   },
   "tauri": {
     "allowlist": {
@@ -67,14 +67,19 @@
       "csp": null
     },
     "updater": {
-      "active": false
+      "active": true,
+      "dialog": false,
+      "endpoints": [
+        "https://gist.githubusercontent.com/markonyango/02ca7c931510bbd2a225a3588bb6e9c1/raw"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFNjRGOTMxNzI0RTQxMkQKUldRdFFVNXlNZmxrYnNkWWpub1hMOGdtS2xhMGlydlVGRjcwNlRoeEFRdi92SzJVNE9lS2c3V0EK"
     },
     "windows": [
       {
         "fullscreen": false,
         "height": 600,
         "resizable": true,
-        "title": "Elite Mod - Recent Matches",
+        "title": "ESL Reporter",
         "width": 800
       }
     ]

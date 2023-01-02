@@ -5,6 +5,7 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatchListModule } from './features/match-list/match-list.module';
+import { MatSnackBarModule } from '@angular/material/snack-bar';
 
 @NgModule({
   declarations: [
@@ -14,7 +15,8 @@ import { MatchListModule } from './features/match-list/match-list.module';
     BrowserModule,
     AppRoutingModule,
     BrowserAnimationsModule,
-    MatchListModule
+    MatchListModule,
+    MatSnackBarModule,
   ],
   providers: [],
   bootstrap: [AppComponent]
