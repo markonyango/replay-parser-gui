@@ -1,5 +1,6 @@
 use parser_lib::{actions::Action, message::Message};
 use serde::Serialize;
+use chrono::prelude::*;
 
 use super::{
     game::ExtendedGameInformation,
@@ -109,8 +110,8 @@ impl ReplayReportDto {
             id: replay.id.to_string(),
             map: replay.map.path.clone().replace("DATA:maps\\pvp\\", ""),
             reporter: ReplayReportReporterDto {
-                date: replay.date.clone(),
-                version: "0.4".into(),
+                date: chrono::Local::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+                version: "1.0.1".into(),
             },
             replay: if let Some(replay_string) = replay.replay.clone() {
                 replay_string
