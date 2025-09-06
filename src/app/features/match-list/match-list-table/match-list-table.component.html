@@ -9,7 +9,9 @@
   </ng-container>
   <ng-container matColumnDef="map">
     <th mat-header-cell *matHeaderCellDef>Map</th>
-    <td mat-cell *matCellDef="let element"><app-map-cell *ngIf="element.map" [map]="element.map"></app-map-cell></td>
+    <td mat-cell *matCellDef="let element">@if (element.map) {
+      <app-map-cell [map]="element.map"></app-map-cell>
+    }</td>
   </ng-container>
   <ng-container matColumnDef="duration">
     <th mat-header-cell *matHeaderCellDef>Duration</th>
@@ -18,8 +20,11 @@
   <ng-container matColumnDef="status">
     <th mat-header-cell *matHeaderCellDef>Uploaded</th>
     <td mat-cell *matCellDef="let element">
-      <ng-container *ngIf="element.status?.response === 'ok'; else failedStatus"><mat-icon>check</mat-icon></ng-container>
-      <ng-template #failedStatus><mat-icon>warning</mat-icon></ng-template>
+      @if (element.status?.response === 'ok') {
+        <mat-icon>check</mat-icon>
+      } @else {
+        <mat-icon>warning</mat-icon>
+      }
     </td>
   </ng-container>
   <ng-container matColumnDef="played_at">
@@ -30,8 +35,12 @@
     <th mat-header-cell *matHeaderCellDef aria-label="row actions">&nbsp;</th>
     <td mat-cell *matCellDef="let element">
       <button mat-icon-button aria-label="expand row" (click)="handleRowClick(element); $event.stopPropagation()">
-        <mat-icon *ngIf="expandedElement !== element">keyboard_arrow_down</mat-icon>
-        <mat-icon *ngIf="expandedElement === element">keyboard_arrow_up</mat-icon>
+        @if (expandedElement !== element) {
+          <mat-icon>keyboard_arrow_down</mat-icon>
+        }
+        @if (expandedElement === element) {
+          <mat-icon>keyboard_arrow_up</mat-icon>
+        }
       </button>
     </td>
   </ng-container>
@@ -44,7 +53,7 @@
       </div>
     </td>
   </ng-container>
-  
+
   <tr mat-header-row *matHeaderRowDef="columnsToDisplayWithExpand"></tr>
   <tr mat-row *matRowDef="let element; columns: columnsToDisplayWithExpand;" (click)="handleRowClick(element)"
     class="element-row" [class.expanded-row]="expandedElement === element">
