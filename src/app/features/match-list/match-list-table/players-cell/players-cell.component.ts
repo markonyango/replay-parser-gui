@@ -1,34 +1,24 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import { PlayerInfo } from 'src/types';
 
 @Component({
-    selector: 'app-players-cell',
-    templateUrl: './players-cell.component.html',
-    styleUrls: ['./players-cell.component.css'],
-    standalone: false
+  selector: 'app-players-cell',
+  templateUrl: './players-cell.component.html',
+  styleUrls: ['./players-cell.component.css'],
+  standalone: false
 })
 export class PlayersCellComponent {
-  @Input() players: PlayerInfo[] = [];
+  players = input<PlayerInfo[]>([]);
 
-  teamOne: string = '';
-  teamTwo: string = '';
+  teamOne = computed(() => this.players()
+    .filter((player) => player.team === 0)
+    .map((player) => player.name)
+    .join(', '));
 
-  winner: number = 0;
+  teamTwo = computed(() => this.players()
+    .filter((player) => player.team === 1)
+    .map((player) => player.name)
+    .join(', '));
 
-  constructor() {}
-
-  ngOnChanges() {
-    this.teamOne = this.players
-      .filter((player) => player.team === 0)
-      .map((player) => player.name)
-      .join(', ');
-
-    this.teamTwo = this.players
-      .filter((player) => player.team === 1)
-      .map((player) => player.name)
-      .join(', ');
-
-    this.winner =
-      this.players.find((player) => player.status === 'Won')?.team ?? 0;
-  }
+  winner = computed(() => this.players().find(player => player.status === 'Won')?.team ?? 0);
 }

@@ -4,9 +4,13 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { switchMap } from "rxjs";
+import { inject } from "@angular/core/primitives/di";
+
+
 @Injectable({ providedIn: "root" })
 export class UpdateService {
-  constructor(private _snackBar: MatSnackBar) { }
+  private _snackBar = inject(MatSnackBar);
+
   async check() {
     const update = await check();
     const currentVersion = await getVersion();

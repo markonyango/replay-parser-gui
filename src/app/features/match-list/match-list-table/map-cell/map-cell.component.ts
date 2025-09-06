@@ -1,20 +1,14 @@
-import { Component, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, computed, input } from '@angular/core';
 import { MapInfo } from 'src/types';
 
 @Component({
-    selector: 'app-map-cell',
-    templateUrl: './map-cell.component.html',
-    styleUrls: ['./map-cell.component.css'],
-    standalone: false
+  selector: 'app-map-cell',
+  templateUrl: './map-cell.component.html',
+  styleUrls: ['./map-cell.component.css'],
+  standalone: false
 })
-export class MapCellComponent implements OnChanges {
-  @Input() map: MapInfo | undefined;
+export class MapCellComponent {
+  map = input<MapInfo | undefined>(undefined);
 
-  mapname: string | undefined;
-
-  constructor() {}
-
-  ngOnChanges(changes: SimpleChanges): void {
-    this.mapname = this.map?.path.replace('DATA:maps\\pvp\\', '');
-  }
+  mapname = computed(() => this.map()?.path.replace('DATA:maps\\pvp\\', ''));
 }

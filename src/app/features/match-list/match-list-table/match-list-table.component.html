@@ -1,4 +1,4 @@
-<table mat-table [dataSource]="dataSource" multiTemplateDataRows style="width:100%">
+<table mat-table [dataSource]="dataSource()" multiTemplateDataRows style="width:100%">
   <ng-container matColumnDef="match_id">
     <th mat-header-cell *matHeaderCellDef>Match ID</th>
     <td mat-cell *matCellDef="let element">{{element.match_id}}</td>
