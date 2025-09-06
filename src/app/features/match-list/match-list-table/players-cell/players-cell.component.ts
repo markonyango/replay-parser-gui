@@ -2,9 +2,10 @@ import { Component, Input, OnInit } from '@angular/core';
 import { PlayerInfo } from 'src/types';
 
 @Component({
-  selector: 'app-players-cell',
-  templateUrl: './players-cell.component.html',
-  styleUrls: ['./players-cell.component.css'],
+    selector: 'app-players-cell',
+    templateUrl: './players-cell.component.html',
+    styleUrls: ['./players-cell.component.css'],
+    standalone: false
 })
 export class PlayersCellComponent {
   @Input() players: PlayerInfo[] = [];
