@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { appWindow } from '@tauri-apps/api/window';
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import {
   distinctUntilKeyChanged,
   scan,
@@ -7,6 +7,7 @@ import {
 } from 'rxjs';
 import { map, shareReplay } from 'rxjs/operators';
 import { ReplayInfo } from 'src/types';
+const appWindow = getCurrentWebviewWindow()
 
 @Injectable({
   providedIn: 'root',

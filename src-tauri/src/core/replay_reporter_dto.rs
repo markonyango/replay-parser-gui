@@ -1,6 +1,6 @@
+use chrono::prelude::*;
 use parser_lib::{actions::Action, message::Message};
 use serde::Serialize;
-use chrono::prelude::*;
 
 use super::{
     game::ExtendedGameInformation,

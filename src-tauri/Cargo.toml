@@ -11,13 +11,13 @@ rust-version = "1.65"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
-tauri-build = { version = "1.1", features = [] }
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono = "0.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "1.1", features = ["api-all", "updater"] }
+tauri = { version = "2", features = [] }
 regex = "1.7.0"
 color-eyre = "0.6.2"
 encoding_rs_io = "0.1.7"
@@ -30,6 +30,14 @@ notify-debouncer-mini = "0.2.1"
 base64 = "0.13.1"
 tracing-subscriber = "0.3.16"
 tracing = "0.1.37"
+tauri-plugin-shell = "2"
+tauri-plugin-os = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-process = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-http = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-fs = "2"
 
 [dependencies.parser_lib]
 git = "https://github.com/dowmechanicus/ReplayParser"
@@ -42,3 +50,7 @@ default = [ "custom-protocol" ]
 # this feature is used used for production builds where `devPath` points to the filesystem
 # DO NOT remove this
 custom-protocol = [ "tauri/custom-protocol" ]
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater = "2"

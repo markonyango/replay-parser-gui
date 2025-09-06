@@ -12,13 +12,14 @@ use parser_lib::{
 use regex::{Captures, Regex, RegexSet};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tauri::{Window, Manager};
 use std::{
     collections::HashMap,
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
 };
+use tauri::Emitter;
+use tauri::{Manager, WebviewWindow, Window};
 use thiserror::Error;
 use tracing::{error, info};
 
@@ -164,7 +165,9 @@ impl ExtendedGameInformation {
         file_name.set_file_name(format!("{}_{}.rec", self.id, map_name));
 
         let Ok(_) = fs::copy(replay_file_path, file_name) else {
-             return Err(ParserAppError::ParserLibError("Could not copy replay file".into()));
+            return Err(ParserAppError::ParserLibError(
+                "Could not copy replay file".into(),
+            ));
         };
 
         Ok(self)
@@ -202,7 +205,10 @@ impl ExtendedGameInformation {
         Ok(self)
     }
 
-    pub fn transform_replay_to_base64(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<&mut Self> {
+    pub fn transform_replay_to_base64(
+        &mut self,
+        replay_file_path: &PathBuf,
+    ) -> ParserAppResult<&mut Self> {
         let bytes = fs::read(replay_file_path)?;
 
         self.replay = Some(base64::encode(bytes));
@@ -210,9 +216,12 @@ impl ExtendedGameInformation {
         Ok(self)
     }
 
-    pub fn notify_main_window(&mut self, main_window_handle: &Window) -> Result<(), tauri::Error> {
+    pub fn notify_main_window(
+        &mut self,
+        main_window_handle: &WebviewWindow,
+    ) -> Result<(), tauri::Error> {
         let json = serde_json::to_string_pretty(self)?;
-        main_window_handle.emit_all("new-game", json)
+        main_window_handle.emit("new-game", json)
     }
 }
 
@@ -264,4 +273,3 @@ mod tests {
         assert!(res.is_ok());
     }
 }
-

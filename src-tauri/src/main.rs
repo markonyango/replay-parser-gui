@@ -16,10 +16,20 @@ fn main() {
     tracing_subscriber::fmt().init();
 
     tauri::Builder::default()
-        .setup(move |app| {
-            let handle = app.handle();
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            let handle = app.handle().clone();
 
-            std::thread::spawn(move || handle_new_game_event(handle));
+            std::thread::spawn(move || handle_new_game_event(&handle));
 
             Ok(())
         })

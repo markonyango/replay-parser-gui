@@ -6,7 +6,7 @@ use std::{
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use parser_lib::replay::ReplayInfo;
-use tauri::{api::path::document_dir, AppHandle, Manager};
+use tauri::{path::PathResolver, AppHandle, Manager};
 
 use self::{
     error::{ParserAppError, ParserAppResult},
@@ -31,7 +31,9 @@ pub fn parse_logfile(logfile_path: &Path) -> error::ParserAppResult<LogfileGameI
     game_list.parse()?;
 
     let Some(last_game) = game_list.games.last() else {
-        return Err(ParserAppError::ParserLibError("Could not get last game from list of games in logfile".into()));
+        return Err(ParserAppError::ParserLibError(
+            "Could not get last game from list of games in logfile".into(),
+        ));
     };
 
     Ok(last_game.to_owned())
@@ -42,41 +44,44 @@ fn parse_replay_file(replay_file_path: String) -> ParserAppResult<ReplayInfo> {
     Ok(parsed_replay)
 }
 
-lazy_static! {
-    static ref PLAYBACK_PATH: PathBuf = document_dir()
-        .unwrap()
-        .join(r"My Games\Dawn of War II - Retribution\Playback\temp.rec");
-    static ref LOGFILE_PATH: PathBuf = document_dir()
-        .unwrap()
+pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
+    let logfile_path = handle
+        .path()
+        .document_dir()?
         .join(r"My Games\Dawn of War II - Retribution\Logfiles\warnings.txt");
-}
 
-pub fn get_input_files() -> ParserAppResult<InputFiles> {
-    if !(*LOGFILE_PATH).exists() {
+    let playback_path = handle
+        .path()
+        .document_dir()?
+        .join(r"My Games\Dawn of War II - Retribution\Playback\temp.rec");
+
+    if !(logfile_path).exists() {
         return Err(ParserAppError::LogfileNotFoundError);
     }
 
-    if !(*PLAYBACK_PATH).exists() {
+    if !(playback_path).exists() {
         return Err(ParserAppError::ReplayNotFoundError);
     }
 
     Ok(InputFiles {
-        replay_file_path: (*PLAYBACK_PATH).to_path_buf(),
-        logfile_path: (*LOGFILE_PATH).to_path_buf(),
+        replay_file_path: (playback_path).to_path_buf(),
+        logfile_path: (logfile_path).to_path_buf(),
     })
 }
 
-pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
-    let Some(main_window_handle) = handle.get_window("main") else {
-                    return Err(ParserAppError::GenericError("Could not acquire main window handle. This is unrecoverable".into()));
-                };
+pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
+    let Some(main_window_handle) = handle.get_webview_window("main") else {
+        return Err(ParserAppError::GenericError(
+            "Could not acquire main window handle. This is unrecoverable".into(),
+        ));
+    };
 
     let (tx, rx) = std::sync::mpsc::channel();
     // let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     let InputFiles {
         replay_file_path,
         logfile_path,
-    } = get_input_files()?;
+    } = get_input_files(&handle)?;
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
@@ -104,4 +109,3 @@ pub fn handle_new_game_event(handle: AppHandle) -> ParserAppResult<()> {
 
     Ok(())
 }
-

@@ -2,86 +2,70 @@
   "build": {
     "beforeDevCommand": "npm run web:serve",
     "beforeBuildCommand": "npm run web:prod",
-    "devPath": "http://localhost:4200",
-    "distDir": "../dist/eslreporter",
-    "withGlobalTauri": true
+    "frontendDist": "../dist/eslreporter",
+    "devUrl": "http://localhost:4200"
   },
-  "package": {
-    "productName": "ESLReporter",
-    "version": "1.0.2"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": true,
-      "path": {
-        "all": true
-      },
-      "fs": {
-        "all": false,
-        "copyFile": false,
-        "createDir": false,
-        "exists": false,
-        "readDir": true,
-        "readFile": false,
-        "removeDir": false,
-        "removeFile": false,
-        "renameFile": false,
-        "scope": ["$DOCUMENT/**/*"],
-        "writeFile": false
-      }
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "Mark Onyango",
+    "targets": "all",
+    "externalBin": [],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
     },
-    "bundle": {
-      "active": true,
-      "category": "DeveloperTool",
-      "copyright": "Mark Onyango",
+    "longDescription": "",
+    "macOS": {
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
+    },
+    "resources": [],
+    "shortDescription": "",
+    "linux": {
       "deb": {
         "depends": []
-      },
-      "externalBin": [],
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "identifier": "com.elite-mod.replay-parser",
-      "longDescription": "",
-      "macOS": {
-        "entitlements": null,
-        "exceptionDomain": "",
-        "frameworks": [],
-        "providerShortName": null,
-        "signingIdentity": null
-      },
-      "resources": [],
-      "shortDescription": "",
-      "targets": "all",
-      "windows": {
-        "certificateThumbprint": null,
-        "digestAlgorithm": "sha256",
-        "timestampUrl": ""
       }
     },
-    "security": {
-      "csp": null
-    },
+    "createUpdaterArtifacts": "v1Compatible"
+  },
+  "productName": "ESLReporter",
+  "mainBinaryName": "ESLReporter",
+  "version": "1.0.2",
+  "identifier": "com.elite-mod.replay-parser",
+  "plugins": {
     "updater": {
-      "active": true,
-      "dialog": false,
       "endpoints": [
         "https://gist.githubusercontent.com/markonyango/02ca7c931510bbd2a225a3588bb6e9c1/raw"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDZFNjRGOTMxNzI0RTQxMkQKUldRdFFVNXlNZmxrYnNkWWpub1hMOGdtS2xhMGlydlVGRjcwNlRoeEFRdi92SzJVNE9lS2c3V0EK"
-    },
+    }
+  },
+  "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "fullscreen": false,
         "height": 600,
         "resizable": true,
         "title": "ESL Reporter",
-        "width": 800
+        "width": 800,
+        "useHttpsScheme": true
       }
-    ]
+    ],
+    "security": {
+      "csp": null
+    }
   }
 }
