@@ -16,6 +16,17 @@ export type ReplayInfo = {
   observers?: Array<ObserverInfo>;
 };
 
+export interface MatchItem {
+  match_id: number,
+  players: PlayerInfo[],
+  map: MapInfo,
+  duration: string,
+  status: string,
+  played_at: string,
+  messages: MessageInfo[],
+  actions: ActionInfo[]
+}
+
 export type GameInfo = {
   name: string;
   mode: string;

@@ -1,14 +1,24 @@
-import { Component, computed, input } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
+import { ICellRendererAngularComp } from 'ag-grid-angular';
+import { ICellRendererParams } from 'ag-grid-community';
 import { PlayerInfo } from 'src/types';
 
 @Component({
   selector: 'app-players-cell',
   templateUrl: './players-cell.component.html',
   styleUrls: ['./players-cell.component.css'],
-  standalone: false
+  standalone: true
 })
-export class PlayersCellComponent {
-  players = input<PlayerInfo[]>([]);
+export class PlayersCellComponent implements ICellRendererAngularComp {
+  agInit(params: ICellRendererParams<any, any, any>): void {
+    this.players.set(params.value);
+  }
+
+  refresh(params: ICellRendererParams<any, any, any>): boolean {
+    return false;
+  }
+
+  players = signal<PlayerInfo[]>([]);
 
   teamOne = computed(() => this.players()
     .filter((player) => player.team === 0)

@@ -1,60 +1,61 @@
-import { Injectable } from '@angular/core';
+import { computed, Injectable, signal } from '@angular/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
-import {
-  distinctUntilKeyChanged,
-  scan,
-  Subject,
-} from 'rxjs';
-import { map, shareReplay } from 'rxjs/operators';
-import { ReplayInfo } from 'src/types';
+import { MatchItem, ReplayInfo } from 'src/types';
+
 const appWindow = getCurrentWebviewWindow()
 
 @Injectable({
   providedIn: 'root',
 })
 export class TauriService {
-  public matchList$;
-  private _replays$;
-  private _match: Subject<ReplayInfo> = new Subject<ReplayInfo>();
+  private state = signal<MatchItem[]>([]);
+
+  private knownMatchIDs = new Set<number>();
+
+  public matchList = computed(() => this.state());
 
   constructor() {
-    this._replays$ = this._match.asObservable().pipe(
-      distinctUntilKeyChanged('id'),
-      scan((acc, value) => [...acc, value], [] as ReplayInfo[]),
-      shareReplay({ bufferSize: 1, refCount: true })
-    );
-
-    this.matchList$ = this._replays$.pipe(
-      map((replays) =>
-        replays.map((replay) => {
-          let status;
-          try {
-            status = JSON.parse(replay.status);
-          } catch(error) {
-            status = { error: replay.status }
-          }
-
-          return {
-            match_id: replay.id,
-            players: replay.players,
-            map: replay.map,
-            duration: ticks2time(replay.ticks),
-            status,
-            played_at: replay.date,
-          };
-        })
-      )
-    );
-
     appWindow.listen<string>('new-game', (event) => {
+      console.log(event.payload);
       let json: ReplayInfo = JSON.parse(event.payload);
+      console.log(json);
 
-      this._match.next(json);
+      // Do not add existing matches multiple times
+      if (this.knownMatchIDs.has(json.id)) {
+        return;
+      }
+
+      this.state.update(state => {
+        let match = mapJsonToVM(json);
+        this.knownMatchIDs.add(match.match_id);
+        return [...state, match]
+      });
     });
   }
 }
 
-function ticks2time(ticks: number) {
+function mapJsonToVM(json: ReplayInfo): MatchItem {
+  let status;
+  try {
+    status = JSON.parse(json.status);
+  } catch (error) {
+    status = { error: json.status }
+  }
+
+  return {
+    match_id: json.id,
+    players: json.players,
+    map: json.map,
+    duration: ticks2time(json.ticks),
+    status,
+    played_at: json.date,
+    messages: json.messages,
+    actions: json.actions
+  };
+
+}
+
+export function ticks2time(ticks: number) {
   const total_seconds = Math.floor(ticks / 10);
   const minutes = Math.floor(total_seconds / 60);
   const remaining_seconds = total_seconds - minutes * 60;

@@ -48,12 +48,21 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     let logfile_path = handle
         .path()
         .document_dir()?
-        .join(r"My Games\Dawn of War II - Retribution\Logfiles\warnings.txt");
+        .join("My Games")
+        .join("Dawn of War II - Retribution")
+        .join("Logfiles")
+        .join("warnings.txt");
 
     let playback_path = handle
         .path()
         .document_dir()?
-        .join(r"My Games\Dawn of War II - Retribution\Playback\temp.rec");
+        .join("My Games")
+        .join("Dawn of War II - Retribution")
+        .join("Playback")
+        .join("temp.rec");
+
+    tracing::debug!("Replay path: {playback_path:?}");
+    tracing::debug!("Log path: {logfile_path:?}");
 
     if !(logfile_path).exists() {
         return Err(ParserAppError::LogfileNotFoundError);
@@ -77,11 +86,11 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
     };
 
     let (tx, rx) = std::sync::mpsc::channel();
-    // let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
     let InputFiles {
         replay_file_path,
         logfile_path,
     } = get_input_files(&handle)?;
+
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
@@ -92,7 +101,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
 
     for events in rx {
         for _e in events? {
-            tracing::debug!("Received a replay file notify event");
+            tracing::info!("Received a replay file notify event");
             let logfile_game_info = parse_logfile(&logfile_path)?;
             let replay_file_info =
                 parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;

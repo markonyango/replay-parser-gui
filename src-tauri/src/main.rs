@@ -9,11 +9,12 @@ extern crate lazy_static;
 mod core;
 
 use crate::core::handle_new_game_event;
+use tracing::Level;
 use tracing_subscriber;
 
 fn main() {
     color_eyre::install().unwrap();
-    tracing_subscriber::fmt().init();
+    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -29,7 +30,10 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
 
-            std::thread::spawn(move || handle_new_game_event(&handle));
+            std::thread::spawn(move || match handle_new_game_event(&handle) {
+                Ok(_) => (),
+                Err(e) => tracing::error!("Error occurred in app backend: {e}"),
+            });
 
             Ok(())
         })
