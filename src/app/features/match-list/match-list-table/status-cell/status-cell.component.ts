@@ -16,7 +16,6 @@ import { ICellRendererParams } from 'ag-grid-community';
 })
 export class StatusCellComponent implements ICellRendererAngularComp {
     agInit(params: ICellRendererParams<any, any, any>): void {
-        console.log(params.value);
         if (params.value?.status) {
             const status = JSON.parse(params.value?.status);
             this.ok.set(status.response == 'ok');

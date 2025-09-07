@@ -16,9 +16,7 @@ export class TauriService {
 
   constructor() {
     appWindow.listen<string>('new-game', (event) => {
-      console.log(event.payload);
       let json: ReplayInfo = JSON.parse(event.payload);
-      console.log(json);
 
       // Do not add existing matches multiple times
       if (this.knownMatchIDs.has(json.id)) {

@@ -8,6 +8,7 @@ import { MapCellComponent } from './map-cell/map-cell.component';
 import { PlayersCellComponent } from './players-cell/players-cell.component';
 import { StatusCellComponent } from './status-cell/status-cell.component';
 import { MatchDetailsComponent } from './match-details.component';
+import { DetailsCellComponent } from './details-cell/details-cell.component';
 
 ModuleRegistry.registerModules([AllCommunityModule, ClientSideRowModelModule]);
 
@@ -43,7 +44,8 @@ export class MatchListTableComponent {
       { flex: 2, field: 'map', cellRenderer: MapCellComponent },
       { flex: 1, field: 'duration' },
       { flex: 1, field: 'status', headerName: 'Uploaded', cellRenderer: StatusCellComponent },
-      { flex: 1, field: 'played_at', headerName: 'Played at' }
+      { flex: 1, field: 'played_at', headerName: 'Played at' },
+      { flex: 1, cellRenderer: DetailsCellComponent }
     ],
     onRowDoubleClicked: event => this._matDialog.open(MatchDetailsComponent, {
       hasBackdrop: true, data: event.data, height: '80vh', minWidth: '80vw'

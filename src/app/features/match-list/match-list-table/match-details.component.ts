@@ -1,4 +1,3 @@
-import { JsonPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -12,13 +11,12 @@ import { ActionInfo, MatchItem, MessageInfo } from 'src/types';
   template: `
       <h1 mat-dialog-title>Match Details ({{ data.match_id }})</h1>
       <mat-dialog-content>
-      <div class="flex flex-col gap-4">
+      <div class="flex flex-col gap-5">
         <h2>Messages</h2>
-        <ag-grid-angular style="width: 100%; height: 300px" [rowData]="messages" [columnDefs]="messages_colDefs" />
+        <ag-grid-angular style="width: 100%; height: 400px" [rowData]="messages" [columnDefs]="messages_colDefs" />
         <h2>Actions</h2>
-        <ag-grid-angular style="width: 100%; height: 300px" [rowData]="actions" [columnDefs]="actions_colDefs" />
+        <ag-grid-angular style="width: 100%; height: 400px" [rowData]="actions" [columnDefs]="actions_colDefs" />
       </div>
-        <pre><code>{{ data | json }}</code></pre>
       </mat-dialog-content>
       <mat-dialog-actions align="end">
         <button matButton mat-dialog-close>Close</button>
@@ -29,7 +27,6 @@ import { ActionInfo, MatchItem, MessageInfo } from 'src/types';
     MatDialogModule,
     MatCardModule,
     MatButtonModule,
-    JsonPipe
   ]
 })
 export class MatchDetailsComponent {
@@ -39,19 +36,30 @@ export class MatchDetailsComponent {
   protected actions = this.data.actions;
 
   protected messages_colDefs: ColDef<MessageInfo>[] = [
-    { flex: 1, field: 'tick', valueFormatter: params => ticks2time(params.data?.tick ?? 0) },
-    { flex: 1, field: 'sender' },
+    { flex: 0.2, field: 'tick', valueFormatter: params => ticks2time(params.data?.tick ?? 0) },
+    { flex: 0.2, field: 'sender' },
+    { flex: 0.2, field: 'receiver' },
     { flex: 1, field: 'body' }
   ];
 
   protected actions_colDefs: ColDef<ActionInfo>[] = [
-    { flex: 1, field: 'relic_id' },
-    { flex: 1, field: 'name' },
+    { flex: 1, field: 'relic_id', headerName: 'Relic ID' },
+    { flex: 1, field: 'name', filter: 'agTextColumnFilter' },
     { flex: 1, field: 'tick', valueFormatter: params => ticks2time(params.data?.tick ?? 0) },
     {
       flex: 1, field: 'data',
       headerName: 'Type',
-      valueFormatter: params => getActionType(params.data?.data[0])
+      valueFormatter: params => getActionType(params.data?.data)
+    },
+    {
+      flex: 1, field: 'data',
+      headerName: 'Player location ID / SIM ID',
+      valueFormatter: params => params.data?.data[1].toString() ?? ''
+    },
+    {
+      flex: 1, field: 'data',
+      headerName: 'Action counter(s)',
+      valueFormatter: params => `${params.data?.data[4]?.toString()} | ${params.data?.data[5]?.toString()}`
     },
     {
       flex: 1, field: 'data',
@@ -61,7 +69,7 @@ export class MatchDetailsComponent {
     {
       flex: 1, field: 'data',
       headerName: 'Item ID',
-      valueFormatter: params => params.data?.data[12].toString() ?? ''
+      valueFormatter: params => params.data?.data[12]?.toString() ?? ''
     },
     { flex: 1, field: 'data' }
   ];
@@ -71,8 +79,10 @@ function getActionContext(data: [number | undefined, number | undefined]): strin
   return `${data[0]} | ${data[1]}`;
 }
 
-function getActionType(data: number | undefined): string {
-  switch (data) {
+function getActionType(data: number[] | undefined): string {
+  if (!data) { return '' };
+
+  switch (data[0]) {
     case 3: return 'Build unit';
     case 5: return 'Cancel unit or wargear';
     case 15: return 'Upgrade Building';
@@ -81,34 +91,8 @@ function getActionType(data: number | undefined): string {
     case 50: return 'Purchase wargear';
     case 51: return 'Cancel wargear purchase';
     case 78: return 'Place building';
+    case 85: return 'Global ability';
     default:
       return 'unknown';
   }
 }
-// - 1 => Ability on placeable object
-// - 3 => Build unit
-// - 5 => Cancel unit or wargear
-// - 9 => Unknown // source: 0x10
-// - 11 => Set rally point
-// - 15 => Upgrade building
-// - 23 => Exit building
-// - 43 => Stop move
-// - 44 => Move
-// - 47 => Capture point
-// - 48 => Attack
-// - 49 => Reinforce unit
-// - 50 => Purchase wargear
-// - 51 => Cancel wargear purchase
-// - 52 => Attack move
-// - 53 => Ability on unit
-// - 56 => Enter building or vehicle
-// - 58 => Exit vehicle
-// - 61 => Retreat
-// - 70 => Force melee
-// - 71 => Toggle stance
-// - 78 => Place building
-// - 85 => Global ability
-// - 89 => Unknown
-// - 94 => Unknown // source 0x0
-// - 96 => Unknown // source 0x0
-// - 98 => Unknown // source 0x0

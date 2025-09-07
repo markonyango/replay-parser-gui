@@ -63,8 +63,8 @@ pub struct GameInfo {
     pub victory_points: usize,
 }
 
-impl GameInfo {
-    pub fn from(game: ReplayGame) -> Self {
+impl From<ReplayGame> for GameInfo {
+    fn from(game: ReplayGame) -> Self {
         Self {
             name: game.name,
             mode: game.mode,
