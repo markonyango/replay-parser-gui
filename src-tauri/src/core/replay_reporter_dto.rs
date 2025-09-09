@@ -111,7 +111,7 @@ impl ReplayReportDto {
             map: replay.map.path.clone().replace("DATA:maps\\pvp\\", ""),
             reporter: ReplayReportReporterDto {
                 date: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-                version: "1.0.4".into(),
+                version: "1.0.5".into(),
             },
             replay: if let Some(replay_string) = replay.replay.clone() {
                 replay_string
