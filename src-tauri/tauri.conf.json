@@ -2,7 +2,7 @@
   "build": {
     "beforeDevCommand": "npm run web:serve",
     "beforeBuildCommand": "npm run web:prod",
-    "frontendDist": "../dist/eslreporter",
+    "frontendDist": "../dist/eslreporter/browser",
     "devUrl": "http://localhost:4200"
   },
   "bundle": {
