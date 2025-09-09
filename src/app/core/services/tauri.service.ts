@@ -1,5 +1,6 @@
 import { computed, Injectable, signal } from '@angular/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { load, Store } from '@tauri-apps/plugin-store';
 import { MatchItem, ReplayInfo } from 'src/types';
 
 const appWindow = getCurrentWebviewWindow()
@@ -8,11 +9,13 @@ const appWindow = getCurrentWebviewWindow()
   providedIn: 'root',
 })
 export class TauriService {
-  private state = signal<MatchItem[]>([]);
+  private matches_state = signal<MatchItem[]>([]);
 
   private knownMatchIDs = new Set<number>();
 
-  public matchList = computed(() => this.state());
+  private json_store = signal<Store | undefined>(undefined);
+
+  public matchList = computed(() => this.matches_state());
 
   constructor() {
     appWindow.listen<string>('new-game', (event) => {
@@ -23,12 +26,23 @@ export class TauriService {
         return;
       }
 
-      this.state.update(state => {
+      this.matches_state.update(state => {
         let match = mapJsonToVM(json);
         this.knownMatchIDs.add(match.match_id);
-        return [...state, match]
+
+        // write matches to json store for permanent storage
+        this.json_store()?.set('matches', [match, ...state]);
+
+        // write matches to local state for ui
+        return [match, ...state]
       });
     });
+
+    load('store.json')
+      .then(store => {
+        this.json_store.set(store);
+        this.json_store()?.get<MatchItem[]>('matches').then(matches => this.matches_state.set(matches ?? []));
+      });
   }
 }
 

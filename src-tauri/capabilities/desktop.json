@@ -13,6 +13,7 @@
     "http:default",
     "clipboard-manager:default",
     "updater:default",
-    "fs:default"
+    "fs:default",
+    "store:default"
   ]
 }

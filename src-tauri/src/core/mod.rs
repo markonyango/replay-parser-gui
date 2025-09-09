@@ -6,7 +6,7 @@ use std::{
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use parser_lib::replay::ReplayInfo;
-use tauri::{path::PathResolver, AppHandle, Manager};
+use tauri::{AppHandle, Manager};
 
 use self::{
     error::{ParserAppError, ParserAppResult},

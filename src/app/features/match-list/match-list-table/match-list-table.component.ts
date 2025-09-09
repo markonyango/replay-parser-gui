@@ -1,13 +1,10 @@
-import { Component, computed, inject, input, signal } from '@angular/core';
-import { MatDialogModule, MatDialog } from '@angular/material/dialog';
+import { Component, computed, input, signal } from '@angular/core';
 import { AgGridAngular } from 'ag-grid-angular';
 import { AllCommunityModule, ClientSideRowModelModule, GridApi, GridOptions, ModuleRegistry, themeMaterial } from 'ag-grid-community';
 
-import { ReplayInfo } from 'src/types';
+import { MatchItem } from 'src/types';
 import { MapCellComponent } from './map-cell/map-cell.component';
 import { PlayersCellComponent } from './players-cell/players-cell.component';
-import { StatusCellComponent } from './status-cell/status-cell.component';
-import { MatchDetailsComponent } from './match-details.component';
 import { DetailsCellComponent } from './details-cell/details-cell.component';
 
 ModuleRegistry.registerModules([AllCommunityModule, ClientSideRowModelModule]);
@@ -22,16 +19,15 @@ const theme = themeMaterial
   selector: 'app-match-list-table',
   templateUrl: './match-list-table.component.html',
   styleUrls: ['./match-list-table.component.css'],
-  imports: [AgGridAngular, MatDialogModule],
+  imports: [AgGridAngular],
   standalone: true
 })
 export class MatchListTableComponent {
-  dataSource = input<Partial<ReplayInfo>[]>([]);
+  dataSource = input<MatchItem[]>([]);
 
   private _gridApi = signal<GridApi | undefined>(undefined);
-  private _matDialog = inject(MatDialog);
 
-  gridOptions = computed<GridOptions>(() => ({
+  gridOptions = computed<GridOptions<MatchItem>>(() => ({
     theme,
     onGridReady: event => {
       this._gridApi.set(event.api);
@@ -39,16 +35,13 @@ export class MatchListTableComponent {
     cellSelection: false,
     suppressCellFocus: true,
     columnDefs: [
-      { flex: 1, field: 'match_id', headerName: 'Match ID' },
+      { flex: 1, field: 'match_id', headerName: 'Match ID', sort: 'desc' },
       { flex: 3, field: 'players', cellRenderer: PlayersCellComponent },
       { flex: 2, field: 'map', cellRenderer: MapCellComponent },
       { flex: 1, field: 'duration' },
-      { flex: 1, field: 'status', headerName: 'Uploaded', cellRenderer: StatusCellComponent },
+      { flex: 1, field: 'status', headerName: 'Uploaded', valueGetter: params => params.data?.status['response'] ?? params.data?.status['error'] },
       { flex: 1, field: 'played_at', headerName: 'Played at' },
       { flex: 1, cellRenderer: DetailsCellComponent }
     ],
-    onRowDoubleClicked: event => this._matDialog.open(MatchDetailsComponent, {
-      hasBackdrop: true, data: event.data, height: '80vh', minWidth: '80vw'
-    }),
   }));
 }

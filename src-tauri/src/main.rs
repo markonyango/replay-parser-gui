@@ -17,6 +17,7 @@ fn main() {
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())

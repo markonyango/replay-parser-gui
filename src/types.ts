@@ -21,7 +21,7 @@ export interface MatchItem {
   players: PlayerInfo[],
   map: MapInfo,
   duration: string,
-  status: string,
+  status: Record<string, string>,
   played_at: string,
   messages: MessageInfo[],
   actions: ActionInfo[]
