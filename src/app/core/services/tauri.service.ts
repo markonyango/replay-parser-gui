@@ -44,6 +44,14 @@ export class TauriService {
         this.json_store()?.get<MatchItem[]>('matches').then(matches => this.matches_state.set(matches ?? []));
       });
   }
+
+  delete_match(id: number) {
+    const filteredMatches = this.matches_state().filter(match => match.match_id !== id);
+
+    // write data to the ui state only when updating the state on disk was successful
+    this.json_store()?.set('matches', filteredMatches)
+      .then(() => this.matches_state.set(filteredMatches));
+  }
 }
 
 function mapJsonToVM(json: ReplayInfo): MatchItem {

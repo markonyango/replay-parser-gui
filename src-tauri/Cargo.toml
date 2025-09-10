@@ -1,6 +1,6 @@
 [package]
 name = "replay-parser-gui"
-version = "1.0.5"
+version = "1.0.6"
 description = "Reports game replays to Elite Mod server"
 authors = ["Adeptus Noobus"]
 license = "MIT"

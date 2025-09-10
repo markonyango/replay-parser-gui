@@ -13,4 +13,8 @@ export class MatchListComponent {
   private _matchListService = inject(TauriService);
 
   matchList = this._matchListService.matchList;
+
+  delete(match_id: number) {
+    this._matchListService.delete_match(match_id);
+  }
 }
