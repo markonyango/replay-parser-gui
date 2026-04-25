@@ -7,14 +7,12 @@
 extern crate lazy_static;
 
 mod core;
+mod logger;
 
-use crate::core::handle_new_game_event;
-use tracing::Level;
-use tracing_subscriber;
+use crate::{core::handle_new_game_event, logger::init_logging};
 
 fn main() {
     color_eyre::install().unwrap();
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -29,6 +27,7 @@ fn main() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            init_logging(&app);
             let handle = app.handle().clone();
 
             std::thread::spawn(move || match handle_new_game_event(&handle) {
