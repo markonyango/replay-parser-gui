@@ -179,7 +179,7 @@ impl ExtendedGameInformation {
         let dto = ReplayReportDto::from(self);
 
         let request = client
-            .post("http://dawnofwar.info/esl/esl-report.php")
+            .post("https://dow2elite.com/esl-report.php")
             .json(&dto)
             .build()?;
 
