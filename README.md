@@ -104,6 +104,16 @@ The desktop bundle is configured with:
 - identifier: `com.elite-mod.replay-parser`
 - updater endpoint via Tauri updater plugin
 
+## Preparing a Release
+
+When preparing a new release, bump the version in these three files:
+
+- `src-tauri/tauri.conf.json`: Update the `"version"` field
+- `src-tauri/Cargo.toml`: Update the `version` field in `[package]`
+- `src-tauri/src/core/replay_reporter_dto.rs`: Update the hardcoded version string in the `ReplayReportDto::from()` implementation (e.g., `"1.0.7".into()`)
+
+All three files must have matching version numbers. The reporter version is sent to the server when uploading replay files. After bumping, commit these changes, then trigger the GitHub Actions release workflow from the **Actions** tab.
+
 ## Release Builds And Signing
 
 This project is already configured to generate updater artifacts during release builds:
@@ -175,7 +185,7 @@ On startup, the Angular app checks for updates through the Tauri updater plugin 
 
 - The current README previously contained generic Angular CLI boilerplate. This repository is primarily a Tauri desktop app with an Angular frontend.
 - The project includes several Tauri plugins beyond the current core flow, including updater, dialog, notifications, filesystem access, clipboard access, process control, shell integration, and global shortcuts.
-- The Rust crate version and bundled app version are currently `1.0.6`.
+- The Rust crate version and bundled app version are currently `1.0.7`.
 
 ## License
 
