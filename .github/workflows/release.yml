@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "version=$(jq -r '.version' src-tauri/tauri.conf.json)" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            NOTES=$(git log "$LAST_TAG"..HEAD --oneline --no-merges)
+          else
+            NOTES=$(git log --oneline --no-merges -20)
+          fi
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - run: npm ci
+
+      - name: Build and publish release
+        id: tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tagName: v${{ steps.version.outputs.version }}
+          releaseName: ESLReporter v${{ steps.version.outputs.version }}
+          releaseBody: ${{ steps.notes.outputs.notes }}
+          releaseDraft: false
+          prerelease: false
+
+      - name: Update updater Gist
+        shell: bash
+        env:
+          GIST_PAT: ${{ secrets.GIST_PAT }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ steps.notes.outputs.notes }}
+        run: |
+          REPO="${{ github.repository }}"
+          BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
+
+          MSI_SIG=$(cat "src-tauri/target/release/bundle/msi/ESLReporter_${VERSION}_x64_en-US.msi.zip.sig")
+
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          MANIFEST=$(jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --arg pub_date "$PUB_DATE" \
+            --arg msi_url "${BASE_URL}/ESLReporter_${VERSION}_x64_en-US.msi.zip" \
+            --arg msi_sig "$MSI_SIG" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "windows-x86_64": {
+                  url: $msi_url,
+                  signature: $msi_sig
+                }
+              }
+            }')
+
+          GIST_ID="02ca7c931510bbd2a225a3588bb6e9c1"
+          curl -s -X PATCH \
+            -H "Authorization: token ${GIST_PAT}" \
+            -H "Content-Type: application/json" \
+            -d "{\"files\":{\"esl-reporter-update.json\":{\"content\":$(echo "$MANIFEST" | jq -Rs .)}}}" \
+            "https://api.github.com/gists/${GIST_ID}"
