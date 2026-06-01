@@ -42,7 +42,7 @@
   },
   "productName": "ESLReporter",
   "mainBinaryName": "ESLReporter",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "identifier": "com.elite-mod.replay-parser",
   "plugins": {
     "updater": {
@@ -60,6 +60,7 @@
         "height": 600,
         "resizable": true,
         "title": "ESL Reporter",
+        "visible": false,
         "width": 800,
         "useHttpsScheme": true
       }
