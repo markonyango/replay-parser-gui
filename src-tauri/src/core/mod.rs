@@ -58,7 +58,7 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
         return Err(ParserAppError::LogfileNotFoundError);
     }
 
-    if !(playback_path).exists() {
+    if !playback_path.parent().is_some_and(Path::is_dir) {
         return Err(ParserAppError::ReplayNotFoundError);
     }
 
@@ -85,26 +85,32 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
-    debouncer.watcher().watch(
-        Path::new(replay_file_path.as_os_str()),
-        RecursiveMode::Recursive,
-    )?;
+    let watch_dir = replay_file_path.parent().ok_or_else(|| {
+        ParserAppError::GenericError("Replay path has no parent directory".into())
+    })?;
+
+    debouncer
+        .watcher()
+        .watch(watch_dir, RecursiveMode::NonRecursive)?;
 
     for events in rx {
-        for _e in events? {
-            tracing::info!("Received a replay file notify event");
-            let logfile_game_info = parse_logfile(&logfile_path)?;
-            let replay_file_info =
-                parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
-
-            let mut replay_info = ExtendedGameInformation::new();
-            replay_info
-                .from(replay_file_info, &logfile_game_info)
-                .copy_replay_file(&replay_file_path)?
-                .transform_replay_to_base64(&replay_file_path)?
-                .send_replay_to_server()?
-                .notify_main_window(&main_window_handle)?;
+        // The directory also reports other files in Playback/; only react to temp.rec.
+        // One debounced batch triggers a single upload, however many events it holds.
+        if !events?.iter().any(|e| e.path == replay_file_path) {
+            continue;
         }
+
+        tracing::info!("Received a replay file notify event");
+        let logfile_game_info = parse_logfile(&logfile_path)?;
+        let replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
+
+        let mut replay_info = ExtendedGameInformation::new();
+        replay_info
+            .from(replay_file_info, &logfile_game_info)
+            .copy_replay_file(&replay_file_path)?
+            .transform_replay_to_base64(&replay_file_path)?
+            .send_replay_to_server()?
+            .notify_main_window(&main_window_handle)?;
     }
 
     Ok(())
