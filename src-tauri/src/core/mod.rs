@@ -17,6 +17,7 @@ use self::{
 pub mod error;
 pub mod game;
 mod logfile;
+mod paths;
 pub mod player_info;
 mod replay_reporter_dto;
 
@@ -45,24 +46,13 @@ fn parse_replay_file(replay_file_path: String) -> ParserAppResult<ReplayInfo> {
 }
 
 pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
-    let logfile_path = handle
-        .path()
-        .document_dir()?
-        .join("My Games")
-        .join("Dawn of War II - Retribution")
-        .join("Logfiles")
-        .join("warnings.txt");
+    let game_dir = paths::resolve_game_dir(
+        &handle.path().document_dir()?,
+        handle.path().home_dir().ok().as_deref(),
+    );
 
-    let playback_path = handle
-        .path()
-        .document_dir()?
-        .join("My Games")
-        .join("Dawn of War II - Retribution")
-        .join("Playback")
-        .join("temp.rec");
-
-    tracing::debug!("Replay path: {playback_path:?}");
-    tracing::debug!("Log path: {logfile_path:?}");
+    let logfile_path = game_dir.join("Logfiles").join("warnings.txt");
+    let playback_path = game_dir.join("Playback").join("temp.rec");
 
     if !(logfile_path).exists() {
         return Err(ParserAppError::LogfileNotFoundError);
@@ -91,6 +81,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         logfile_path,
     } = get_input_files(&handle)?;
 
+    tracing::info!("InputFiles: {:#?} | {:#?}", replay_file_path, logfile_path);
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
