@@ -1,10 +1,140 @@
+@import '@fontsource/cinzel/500.css';
+@import '@fontsource/cinzel/700.css';
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/600.css';
+@import 'material-icons/iconfont/material-icons.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* Grim-dark Imperial theme: void-black iron, aged gold, parchment text, blood-red accents. */
+:root {
+  --c-void: #100d0b;
+  --c-iron: #1b1714;
+  --c-iron-raised: #26211c;
+  --c-border: #4a3f30;
+  --c-gold: #c0993f;
+  --c-gold-bright: #e2bd5c;
+  --c-parchment: #e3d8bd;
+  --c-parchment-dim: #9d9078;
+  --c-blood: #a31f1f;
+  --c-blood-bright: #d23a35;
+  --c-team-a: #5b86c9;
+  --c-team-b: #d0463f;
+  --c-ok: #6f9a4a;
+  --font-display: 'Cinzel', 'Trajan Pro', serif;
+  --font-body: 'Barlow', 'Roboto', sans-serif;
+
+  /* Angular Material system tokens */
+  --mat-sys-surface: var(--c-iron);
+  --mat-sys-surface-container-high: var(--c-iron);
+  --mat-sys-on-surface: var(--c-parchment);
+  --mat-sys-on-surface-variant: var(--c-parchment-dim);
+  --mat-sys-primary: var(--c-gold);
+  --mat-sys-on-primary: var(--c-void);
+  --mat-sys-outline-variant: var(--c-border);
+  --mat-sys-corner-extra-large: 2px;
+  --mat-sys-title-large-font: var(--font-display);
+  --mat-sys-body-medium-font: var(--font-body);
+  --mat-sys-label-large-font: var(--font-display);
+  --mat-tab-active-label-text-color: var(--c-gold-bright);
+  --mat-tab-active-focus-label-text-color: var(--c-gold-bright);
+  --mat-tab-active-hover-label-text-color: var(--c-gold-bright);
+  --mat-tab-inactive-label-text-color: var(--c-parchment-dim);
+  --mat-tab-active-indicator-color: var(--c-gold);
+  --mat-tab-active-focus-indicator-color: var(--c-gold);
+  --mat-tab-active-hover-indicator-color: var(--c-gold-bright);
+  --mat-tab-divider-color: var(--c-border);
+  --mat-dialog-container-color: var(--c-iron);
+  --mat-dialog-subhead-color: var(--c-gold-bright);
+  --mat-dialog-supporting-text-color: var(--c-parchment);
+  --mat-button-text-label-text-color: var(--c-gold);
+  --mat-button-text-state-layer-color: var(--c-blood);
+  --mat-button-text-hover-state-layer-opacity: 0.55;
+  --mat-button-text-focus-state-layer-opacity: 0.55;
+  --mat-button-text-pressed-state-layer-opacity: 0.75;
+  --mat-icon-button-icon-color: var(--c-gold);
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--c-void);
+  color: var(--c-parchment);
+  font-family: var(--font-body);
+}
+
+body {
+  background-image: radial-gradient(ellipse at top, #241d17 0%, var(--c-void) 70%);
+  background-attachment: fixed;
+}
+
+::selection { background: var(--c-blood); color: var(--c-parchment); }
+
+* { scrollbar-color: var(--c-border) var(--c-void); }
 
 app-match-list,
 app-match-list-table {
   display: block;
   height: 100%;
 }
+
+:focus-visible { outline: 2px solid var(--c-gold-bright); outline-offset: 2px; }
+
+/* Dialog: iron plate with a gold frame */
+.mat-mdc-dialog-container .mdc-dialog__surface {
+  border: 1px solid var(--c-gold);
+  box-shadow: 0 0 0 3px var(--c-iron), 0 0 0 4px var(--c-border), 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+.mat-mdc-dialog-title {
+  font-family: var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.mat-mdc-dialog-title::before { display: none; }
+.mat-mdc-dialog-container .mat-mdc-button {
+  font-family: var(--font-display);
+  letter-spacing: 0.1em;
+  border-radius: 2px;
+}
+.cdk-overlay-dark-backdrop { background: rgba(5, 3, 2, 0.8); }
+
+.mat-mdc-dialog-container .mat-mdc-button:hover:not(:disabled),
+.mat-mdc-dialog-container .mat-mdc-button:focus-visible:not(:disabled) {
+  --mat-button-text-label-text-color: var(--c-parchment);
+}
+
+/* Shared form-field look for dialog search/filter controls */
+.field {
+  background: var(--c-void);
+  color: var(--c-parchment);
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+.field::placeholder { color: var(--c-parchment-dim); }
+.field:hover { border-color: var(--c-gold); }
+
+/* Icon buttons inside grid cells: keep the hover target square and the glyph centred */
+.ag-cell .mat-mdc-icon-button.mat-mdc-button-base {
+  --mat-icon-button-state-layer-size: 32px;
+  --mat-icon-button-state-layer-color: var(--c-blood);
+  --mat-icon-button-hover-state-layer-opacity: 0.55;
+  --mat-icon-button-focus-state-layer-opacity: 0.55;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  line-height: 1;
+  vertical-align: middle;
+  border-radius: 2px;
+}
+.ag-cell .mat-mdc-icon-button:hover { --mat-icon-button-icon-color: var(--c-parchment); }
+.ag-cell .mat-mdc-icon-button .mat-mdc-button-persistent-ripple,
+.ag-cell .mat-mdc-icon-button .mat-mdc-button-persistent-ripple::before { border-radius: 2px; }
+.ag-cell .mat-mdc-icon-button .mat-icon { margin: 0; }

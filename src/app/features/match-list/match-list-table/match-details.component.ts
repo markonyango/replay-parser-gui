@@ -5,6 +5,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { AgGridAngular } from 'ag-grid-angular';
 import { ColDef, GridApi, GridReadyEvent } from 'ag-grid-community';
 import { ticks2time } from 'src/app/core/services/tauri.service';
+import { gridTheme } from './grid-theme';
 import { ActionInfo, MatchItem, MessageInfo, PlayerInfo } from 'src/types';
 
 type ActionRow = ActionInfo & {
@@ -17,35 +18,35 @@ type ActionRow = ActionInfo & {
 const ACTIONS_TAB = 1;
 
 const TEAM_STYLES = [
-    { chip: 'bg-blue-100 text-blue-900', text: 'text-blue-800' },
-    { chip: 'bg-red-100 text-red-900', text: 'text-red-800' },
+    { chip: 'border border-[#5b86c9] bg-[#5b86c9]/15 text-[#a9c4ee]', text: 'text-[#7fa3dc]' },
+    { chip: 'border border-[#d0463f] bg-[#d0463f]/15 text-[#f0a09b]', text: 'text-[#e2736d]' },
 ];
 
 @Component({
     template: `
         <h1 mat-dialog-title>
             Match Details
-            <span class="text-sm font-normal text-gray-500">#{{ data.match_id }}</span>
+            <span class="text-sm font-normal normal-case tracking-normal text-[color:var(--c-parchment-dim)]">#{{ data.match_id }}</span>
         </h1>
 
         <section
-            class="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 pb-3 text-sm"
+            class="mx-6 mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-[color:var(--c-border)] py-3 text-sm"
             aria-label="Match summary"
         >
             <div class="flex flex-col">
-                <span class="font-medium">{{ mapName }}</span>
-                <span class="text-gray-500">{{ data.duration }}</span>
+                <span class="font-medium text-[color:var(--c-gold-bright)]" style="font-family: var(--font-display)">{{ mapName }}</span>
+                <span class="text-[color:var(--c-parchment-dim)]">{{ data.duration }}</span>
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 @for (team of teams; track team.index) {
                     @if (!$first) {
-                        <span class="text-gray-500">vs.</span>
+                        <span class="text-[color:var(--c-parchment-dim)]">vs.</span>
                     }
                     <div class="flex flex-wrap items-center gap-1">
                         <span aria-hidden="true">{{ team.won ? '&#127942;' : '&#9760;' }}</span>
                         <span class="sr-only">{{ team.won ? 'Winners:' : 'Defeated:' }}</span>
                         @for (player of team.players; track player.slot) {
-                            <span class="rounded-full px-2 py-0.5" [class]="team.style.chip">
+                            <span class="rounded-sm px-2 py-0.5" [class]="team.style.chip">
                                 {{ player.name }}
                             </span>
                         }
@@ -72,17 +73,17 @@ const TEAM_STYLES = [
                             (input)="messageQuery.set(messageSearch.value)"
                         />
                         @if (messages.length === 0) {
-                            <p class="text-gray-500">No messages in this replay.</p>
+                            <p class="text-[color:var(--c-parchment-dim)]">No messages in this replay.</p>
                         } @else if (filteredMessages().length === 0) {
-                            <p class="text-gray-500">No messages match your search.</p>
+                            <p class="text-[color:var(--c-parchment-dim)]">No messages match your search.</p>
                         } @else {
                             <ul class="m-0 min-h-0 flex-1 list-none space-y-1 overflow-y-auto p-0" role="log">
                                 @for (message of filteredMessages(); track $index) {
                                     <li class="flex gap-3">
-                                        <span class="w-12 shrink-0 font-mono text-gray-500">{{ time(message.tick) }}</span>
+                                        <span class="w-12 shrink-0 font-mono text-[color:var(--c-parchment-dim)]">{{ time(message.tick) }}</span>
                                         <span class="min-w-0 break-words">
                                             <span class="font-semibold" [class]="senderClass(message.sender)">{{ message.sender }}</span>
-                                            <span class="text-gray-500"> → {{ message.receiver }}:</span>
+                                            <span class="text-[color:var(--c-parchment-dim)]"> → {{ message.receiver }}:</span>
                                             {{ message.body }}
                                         </span>
                                     </li>
@@ -117,13 +118,14 @@ const TEAM_STYLES = [
                                     </option>
                                 }
                             </select>
-                            <span class="text-sm text-gray-500" aria-live="polite">
+                            <span class="text-sm text-[color:var(--c-parchment-dim)]" aria-live="polite">
                                 {{ filteredActions().length.toLocaleString() }} shown
                             </span>
                         </div>
                         <ag-grid-angular
                             class="min-h-0 flex-1"
                             style="width: 100%"
+                            [theme]="theme"
                             [rowData]="filteredActions()"
                             [columnDefs]="actions_colDefs"
                             [quickFilterText]="actionQuery()"
@@ -186,9 +188,10 @@ export class MatchDetailsComponent {
         this.data.players.map((p) => [p.name, p.team] as const),
     );
 
+    protected readonly theme = gridTheme;
     protected readonly ACTIONS_TAB = ACTIONS_TAB;
     protected readonly fieldClass =
-        'rounded border border-gray-300 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600';
+        'field';
 
     protected selectedTab = signal(
         this.messages.length > 0 || this.actions.length === 0 ? 0 : ACTIONS_TAB,

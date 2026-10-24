@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   standalone: true,
-  template: '<button mat-icon-button><mat-icon (click)="action()(params())">delete</mat-icon></button>',
+  template: '<button mat-icon-button type="button" aria-label="Delete match" (click)="action()(params())"><mat-icon>delete</mat-icon></button>',
   imports: [MatButtonModule, MatIconModule]
 })
 export class DeleteRendererComponent {

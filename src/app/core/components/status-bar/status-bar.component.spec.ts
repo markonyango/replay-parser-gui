@@ -33,8 +33,8 @@ describe('StatusBarComponent', () => {
         expect(items[0].getAttribute('data-state')).toBe('ok');
         expect(items[1].getAttribute('data-state')).toBe('error');
         expect(items[1].getAttribute('title')).toBe('missing');
-        expect(items[0].querySelector('.bg-green-600')).toBeTruthy();
-        expect(items[1].querySelector('.bg-red-600')).toBeTruthy();
+        expect(items[0].querySelector('[data-testid="marker-ok"]')).toBeTruthy();
+        expect(items[1].querySelector('[data-testid="marker-error"]')).toBeTruthy();
     });
 
     it('renders no indicators when none are given', () => {

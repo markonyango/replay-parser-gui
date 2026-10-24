@@ -4,7 +4,7 @@ import { MatIconModule } from '@angular/material/icon';
 
 @Component({
   standalone: true,
-  template: '<button mat-icon-button><mat-icon (click)="action()(params())">info</mat-icon></button>',
+  template: '<button mat-icon-button type="button" aria-label="Show match details" (click)="action()(params())"><mat-icon>info</mat-icon></button>',
   imports: [MatButtonModule, MatIconModule],
 })
 export class DetailsRendererComponent {

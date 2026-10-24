@@ -1,7 +1,7 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { AgGridAngular } from 'ag-grid-angular';
-import { AllCommunityModule, ClientSideRowModelModule, GridApi, GridOptions, ModuleRegistry, themeMaterial } from 'ag-grid-community';
+import { AllCommunityModule, ClientSideRowModelModule, GridApi, GridOptions, ModuleRegistry } from 'ag-grid-community';
 
 import { MatchItem } from 'src/types';
 import { MapCellComponent } from './map-cell/map-cell.component';
@@ -9,15 +9,12 @@ import { PlayersCellComponent } from './players-cell/players-cell.component';
 import { DetailsRendererComponent } from './details.renderer';
 import { ActionsCellRendererComponent } from './actions.renderer';
 import { DeleteRendererComponent } from './delete.renderer';
+import { gridTheme } from './grid-theme';
 import { MatchDetailsComponent } from './match-details.component';
 
 ModuleRegistry.registerModules([AllCommunityModule, ClientSideRowModelModule]);
 
-const theme = themeMaterial
-  .withParams({
-    browserColorScheme: "light",
-    headerFontSize: 14
-  });
+const theme = gridTheme;
 
 @Component({
   selector: 'app-match-list-table',
