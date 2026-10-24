@@ -1,7 +1,9 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
+import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { load, Store } from '@tauri-apps/plugin-store';
 import { MatchItem, ReplayInfo } from 'src/types';
+import { StatusService, StatusSnapshot } from './status.service';
 
 const appWindow = getCurrentWebviewWindow();
 
@@ -9,6 +11,8 @@ const appWindow = getCurrentWebviewWindow();
     providedIn: 'root',
 })
 export class TauriService {
+    private status = inject(StatusService);
+
     private matches_state = signal<MatchItem[]>([]);
 
     private knownMatchIDs = new Set<number>();
@@ -37,6 +41,15 @@ export class TauriService {
                 return [match, ...state];
             });
         });
+
+        appWindow
+            .listen<StatusSnapshot>('status-changed', (event) =>
+                this.status.apply(event.payload)
+            )
+            // The backend may have reported status before this listener existed.
+            .then(() => invoke<StatusSnapshot>('get_status'))
+            .then((snapshot) => this.status.apply(snapshot))
+            .catch((error) => console.error('Could not load status', error));
 
         load('store.json').then((store) => {
             this.json_store.set(store);

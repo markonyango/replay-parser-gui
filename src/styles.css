@@ -2,3 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+
+app-match-list,
+app-match-list-table {
+  display: block;
+  height: 100%;
+}

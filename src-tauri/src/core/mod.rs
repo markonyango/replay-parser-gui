@@ -9,6 +9,7 @@ use parser_lib::{replay::ReplayInfo, Chain, GameData};
 use tauri::{AppHandle, Manager};
 
 use self::{
+    status::{set_indicator, set_text, IndicatorState},
     error::{ParserAppError, ParserAppResult},
     game::{copy_replay_file, notify_main_window, ExtendedGameInformation},
     logfile::{LogfileGameInfo, LogfileGameList},
@@ -21,6 +22,7 @@ mod logfile;
 mod paths;
 pub mod player_info;
 mod replay_reporter_dto;
+pub mod status;
 mod transformer;
 
 pub struct InputFiles {
@@ -56,11 +58,23 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     let logfile_path = game_dir.join("Logfiles").join("warnings.txt");
     let playback_path = game_dir.join("Playback").join("temp.rec");
 
-    if !(logfile_path).exists() {
+    let logfile_found = logfile_path.exists();
+    let playback_found = playback_path.parent().is_some_and(Path::is_dir);
+
+    for (id, label, found, path) in [
+        ("replay", "Replay folder", playback_found, playback_path.parent()),
+        ("logfile", "Logfile", logfile_found, Some(logfile_path.as_path())),
+    ] {
+        let state = if found { IndicatorState::Ok } else { IndicatorState::Error };
+        let tooltip = path.map(|p| p.display().to_string());
+        set_indicator(handle, id, label, state, tooltip);
+    }
+
+    if !logfile_found {
         return Err(ParserAppError::LogfileNotFoundError);
     }
 
-    if !playback_path.parent().is_some_and(Path::is_dir) {
+    if !playback_found {
         return Err(ParserAppError::ReplayNotFoundError);
     }
 
@@ -100,6 +114,8 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         .watcher()
         .watch(watch_dir, RecursiveMode::NonRecursive)?;
 
+    set_text(handle, "Watching for replays");
+
     for events in rx {
         // The directory also reports other files in Playback/; only react to temp.rec.
         // One debounced batch triggers a single upload, however many events it holds.
@@ -108,6 +124,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         }
 
         tracing::debug!("Received a replay file notify event");
+        set_text(handle, "Processing replay…");
 
         // A single unusable replay or logfile must not stop the watcher.
         if let Err(e) = process_replay(
@@ -115,8 +132,10 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
             &logfile_path,
             loc.as_ref(),
             &main_window_handle,
+            handle,
         ) {
             tracing::error!("Skipping replay, could not process it: {}", e);
+            set_text(handle, format!("Could not process replay: {e}"));
         }
     }
 
@@ -128,6 +147,7 @@ fn process_replay(
     logfile_path: &Path,
     steam_game_location: Option<&GameData>,
     main_window_handle: &tauri::WebviewWindow,
+    handle: &AppHandle,
 ) -> ParserAppResult<()> {
     let logfile_game_info = parse_logfile(logfile_path)?;
     let mut replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
@@ -140,6 +160,24 @@ fn process_replay(
 
     let replay_file_path = replay_file_path.to_path_buf();
     replay_info.send_replay_to_server(&replay_file_path)?;
+
+    // Mirrors the heuristic used when the server responds: any "error" in the status is a failure.
+    let upload_failed = replay_info.status.contains("error");
+    set_indicator(
+        handle,
+        "upload",
+        "Upload",
+        if upload_failed { IndicatorState::Error } else { IndicatorState::Ok },
+        Some(replay_info.status.clone()),
+    );
+    set_text(
+        handle,
+        if upload_failed {
+            format!("Upload of match {} failed", replay_info.id)
+        } else {
+            format!("Uploaded match {}", replay_info.id)
+        },
+    );
 
     copy_replay_file(&replay_info, &replay_file_path)?;
     notify_main_window(&replay_info, main_window_handle)?;
