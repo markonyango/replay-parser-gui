@@ -33,6 +33,8 @@ use super::{
     replay_reporter_dto::ReplayReportDto,
 };
 
+const REPORT_URL: &str = "https://dow2elite.com/esl-report.php";
+
 #[derive(Debug, Default, Serialize)]
 pub struct ExtendedGameInformation {
     pub id: usize,
@@ -112,14 +114,22 @@ impl ExtendedGameInformation {
         &mut self,
         replay_file_path: &PathBuf,
     ) -> ParserAppResult<&mut Self> {
-        let client = reqwest::blocking::Client::new();
+        self.send_replay_to(REPORT_URL, replay_file_path)
+    }
 
-        let dto = ReplayReportDto::from(self);
+    fn send_replay_to(
+        &mut self,
+        url: &str,
+        replay_file_path: &PathBuf,
+    ) -> ParserAppResult<&mut Self> {
+        let client = reqwest::blocking::Client::new();
 
         self.transform_replay_to_base64(replay_file_path)?;
 
+        let dto = ReplayReportDto::from(self);
+
         let request = client
-            .post("https://dow2elite.com/esl-report.php")
+            .post(url)
             .json(&dto)
             .build()?;
 
@@ -183,51 +193,117 @@ pub fn notify_main_window<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::core::game;
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::TcpListener,
+        sync::mpsc,
+        thread,
+    };
 
     use super::*;
 
-    #[test]
-    fn can_send_replay_to_server() {
-        let mut replay_info = ExtendedGameInformation {
-            dev: Some(true),
-            replay: Some("ABC".into()),
-            status: Default::default(),
+    const FIXTURE_REPLAY: &str = "3v3.rec";
+
+    /// Serves exactly one request with `response` and returns what the client sent.
+    fn serve_once(response: &'static str) -> (String, mpsc::Receiver<String>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/esl-report.php", listener.local_addr().unwrap());
+        let (tx, rx) = mpsc::channel();
+
+        thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut reader = BufReader::new(stream.try_clone().unwrap());
+
+            let mut head = String::new();
+            let mut content_length = 0;
+            loop {
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                if line == "\r\n" {
+                    break;
+                }
+                if let Some(value) = line.to_lowercase().strip_prefix("content-length:") {
+                    content_length = value.trim().parse().unwrap();
+                }
+                head.push_str(&line);
+            }
+
+            let mut body = vec![0; content_length];
+            reader.read_exact(&mut body).unwrap();
+            tx.send(format!("{head}\r\n{}", String::from_utf8_lossy(&body)))
+                .unwrap();
+
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                response.len()
+            )
+            .unwrap();
+        });
+
+        (url, rx)
+    }
+
+    fn sample_game() -> ExtendedGameInformation {
+        ExtendedGameInformation {
             id: 1234,
-            name: "".into(),
-            mod_chksum: 1234,
             mod_version: 1234,
-            md5: "".into(),
-            date: "".into(),
             ticks: 123,
-            game: game::GameInfo {
-                name: "".into(),
-                mode: "".into(),
-                resources: "".into(),
-                locations: "".into(),
-                victory_points: 500,
-            },
-            map: Map {
-                name: "todo!()".to_string(),
-                description: "todo!()".to_string(),
-                abbrname: "todo!()".to_string(),
-                maxplayers: 6,
-                path: "todo!()".to_string(),
-                date: "todo!()".to_string(),
-                width: 512,
-                height: 512,
-            },
-            players: vec![],
-            messages: vec![],
-            actions: vec![],
-            aborted: false,
             frames: 123,
-            ended_at: "".into(),
-        };
+            dev: Some(true),
+            ..Default::default()
+        }
+    }
 
-        let replay_file_path = PathBuf::new();
+    #[test]
+    fn sends_replay_to_server_and_stores_response() {
+        let (url, request) = serve_once(r#"{"response":"ok"}"#);
+        let mut game = sample_game();
 
-        let res = replay_info.send_replay_to_server(&replay_file_path);
-        assert!(res.is_ok(), "{:#?}", res.err());
+        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+            .unwrap();
+
+        let request = request.recv().unwrap();
+        assert!(request.starts_with("POST /esl-report.php"), "{request}");
+        assert!(request.contains(r#""id":"1234""#), "{request}");
+
+        let expected = base64::encode(fs::read(FIXTURE_REPLAY).unwrap());
+        assert!(
+            request.contains(&format!(r#""replay":"{expected}""#)),
+            "request did not carry the base64 replay"
+        );
+
+        assert_eq!(game.status, r#"{"response":"ok"}"#);
+    }
+
+    #[test]
+    fn records_error_when_server_is_unreachable() {
+        // Bind and drop to get a port nothing listens on.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let mut game = sample_game();
+
+        game.send_replay_to(
+            &format!("http://127.0.0.1:{port}/esl-report.php"),
+            &PathBuf::from(FIXTURE_REPLAY),
+        )
+        .unwrap();
+
+        assert!(game.status.contains("error"), "{}", game.status);
+    }
+
+    #[test]
+    fn fails_when_replay_file_is_missing() {
+        let mut game = sample_game();
+
+        let res = game.send_replay_to(
+            "http://127.0.0.1:9/esl-report.php",
+            &PathBuf::from("does-not-exist.rec"),
+        );
+
+        assert!(res.is_err());
     }
 }

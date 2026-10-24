@@ -21,3 +21,31 @@ jobs:
 
       - name: Angular unit tests
         run: npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox
+
+  backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+            libayatana-appindicator3-dev librsvg2-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # Tauri's build script only needs the frontend directory to exist.
+      - name: Stub frontend dist
+        run: mkdir -p dist/eslreporter/browser
+
+      - name: Rust unit tests
+        working-directory: src-tauri
+        run: cargo test
