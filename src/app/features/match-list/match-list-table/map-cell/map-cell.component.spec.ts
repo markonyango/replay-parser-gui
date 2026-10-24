@@ -8,7 +8,7 @@ describe('MapCellComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ MapCellComponent ]
+      imports: [MapCellComponent]
     })
     .compileComponents();
 

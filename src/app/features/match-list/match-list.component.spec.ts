@@ -1,4 +1,6 @@
+import { signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { TauriService } from '../../core/services/tauri.service';
 
 import { MatchListComponent } from './match-list.component';
 
@@ -8,7 +10,13 @@ describe('MatchListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ MatchListComponent ]
+      imports: [MatchListComponent],
+      providers: [
+        {
+          provide: TauriService,
+          useValue: { matchList: signal([]), delete_match: () => {} },
+        },
+      ],
     })
     .compileComponents();
 

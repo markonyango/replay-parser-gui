@@ -8,7 +8,7 @@ describe('MatchListTableComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ MatchListTableComponent ]
+      imports: [MatchListTableComponent]
     })
     .compileComponents();
 
