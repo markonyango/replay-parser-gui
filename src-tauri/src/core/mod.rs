@@ -5,21 +5,23 @@ use std::{
 
 use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
-use parser_lib::replay::ReplayInfo;
+use parser_lib::{replay::ReplayInfo, Chain, GameData};
 use tauri::{AppHandle, Manager};
 
 use self::{
     error::{ParserAppError, ParserAppResult},
-    game::ExtendedGameInformation,
+    game::{copy_replay_file, notify_main_window, ExtendedGameInformation},
     logfile::{LogfileGameInfo, LogfileGameList},
 };
 
+mod discover;
 pub mod error;
 pub mod game;
 mod logfile;
 mod paths;
 pub mod player_info;
 mod replay_reporter_dto;
+mod transformer;
 
 pub struct InputFiles {
     replay_file_path: PathBuf,
@@ -81,7 +83,12 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         logfile_path,
     } = get_input_files(&handle)?;
 
-    tracing::info!("InputFiles: {:#?} | {:#?}", replay_file_path, logfile_path);
+    // Find Steam installation location
+    let loc = discover::locate_elite_module()
+        .ok()
+        .map(|m| GameData::open(&m))
+        .transpose()
+        .map_err(|_e| ParserAppError::GenericError("Steam location not found".to_string()))?;
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
 
@@ -100,18 +107,42 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
             continue;
         }
 
-        tracing::info!("Received a replay file notify event");
-        let logfile_game_info = parse_logfile(&logfile_path)?;
-        let replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
+        tracing::debug!("Received a replay file notify event");
 
-        let mut replay_info = ExtendedGameInformation::new();
-        replay_info
-            .from(replay_file_info, &logfile_game_info)
-            .copy_replay_file(&replay_file_path)?
-            .transform_replay_to_base64(&replay_file_path)?
-            .send_replay_to_server()?
-            .notify_main_window(&main_window_handle)?;
+        // A single unusable replay or logfile must not stop the watcher.
+        if let Err(e) = process_replay(
+            &replay_file_path,
+            &logfile_path,
+            loc.as_ref(),
+            &main_window_handle,
+        ) {
+            tracing::error!("Skipping replay, could not process it: {}", e);
+        }
     }
+
+    Ok(())
+}
+
+fn process_replay(
+    replay_file_path: &Path,
+    logfile_path: &Path,
+    steam_game_location: Option<&GameData>,
+    main_window_handle: &tauri::WebviewWindow,
+) -> ParserAppResult<()> {
+    let logfile_game_info = parse_logfile(logfile_path)?;
+    let mut replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
+
+    Chain::with_defaults(steam_game_location)
+        .run(&mut replay_file_info)
+        .map_err(|e| ParserAppError::ParserLibError(format!("{e:?}")))?;
+
+    let mut replay_info = ExtendedGameInformation::from(&replay_file_info, &logfile_game_info);
+
+    let replay_file_path = replay_file_path.to_path_buf();
+    replay_info.send_replay_to_server(&replay_file_path)?;
+
+    copy_replay_file(&replay_info, &replay_file_path)?;
+    notify_main_window(&replay_info, main_window_handle)?;
 
     Ok(())
 }

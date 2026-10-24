@@ -24,6 +24,7 @@ use thiserror::Error;
 use tracing::{error, info};
 
 use crate::core::error::ParserAppError;
+use crate::core::transformer::transform_player_information;
 
 use super::{
     error::ParserAppResult,
@@ -76,107 +77,46 @@ impl From<ReplayGame> for GameInfo {
 }
 
 impl ExtendedGameInformation {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn from(parsed_replay: &ReplayInfo, parsed_logfile_game: &LogfileGameInfo) -> Self {
+        let mut res = Self {
+            aborted: parsed_logfile_game.aborted,
+            id: parsed_logfile_game.id,
+            map: match parsed_replay.map {
+                parser_lib::chunky::Chunk::Map(ref map) => map.clone(),
+                _ => Map::default(),
+            },
+            frames: parsed_logfile_game.frames,
+            ended_at: parsed_replay.date.clone(),
+            messages: parsed_replay.messages.clone(),
+            actions: parsed_replay.actions.clone(),
+            players: transform_player_information(parsed_logfile_game, parsed_replay),
+            name: parsed_replay.name.clone(),
+            mod_chksum: parsed_replay.mod_chksum as usize,
+            mod_version: parsed_replay.mod_version as usize,
+            md5: parsed_replay.md5.clone(),
+            date: parsed_replay.date.clone(),
+            ticks: parsed_replay.ticks as usize,
+            status: "".into(),
+            dev: None,
+            replay: None,
+            game: match parsed_replay.game {
+                parser_lib::chunky::Chunk::Game(ref game) => GameInfo::from(game.clone()),
+                _ => GameInfo::default(),
+            },
+        };
+
+        res
     }
 
-    pub fn from(
+    pub fn send_replay_to_server(
         &mut self,
-        parsed_replay: ReplayInfo,
-        parsed_logfile_game: &LogfileGameInfo,
-    ) -> &mut Self {
-        let players_with_extended_information = parsed_replay
-            .players
-            .iter()
-            .enumerate()
-            .map(|(index, replayfile_player)| {
-                let logfile_player = parsed_logfile_game.players.get(index);
-
-                let _player = match replayfile_player {
-                    parser_lib::chunky::Chunk::Player(player) => Some(player),
-                    _ => None,
-                };
-
-                match (logfile_player, _player) {
-                    (Some(logfile_player), Some(player)) => {
-                        ExtendedPlayerInformation::from(logfile_player, player)
-                    }
-                    _ => ExtendedPlayerInformation::default(),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let map = match parsed_replay.map {
-            parser_lib::chunky::Chunk::Map(map) => Some(map),
-            _ => None,
-        };
-
-        let game = match parsed_replay.game {
-            parser_lib::chunky::Chunk::Game(game) => GameInfo::from(game),
-            _ => GameInfo::default(),
-        };
-
-        let actions = parsed_replay
-            .actions
-            .iter()
-            .filter_map(|action| {
-                action.data.get(3).and_then(|&id| {
-                    let _id = (id - 0xE8) as usize + 1000;
-                    let _player = players_with_extended_information
-                        .iter()
-                        .find(|&player| player.sim_id == _id);
-
-                    _player.map(|p| Action {
-                        player: p.name.clone(),
-                        relic_id: p.relic_id,
-                        tick: action.tick,
-                        data: action.data.clone(),
-                    })
-                })
-            })
-            .collect::<Vec<_>>();
-
-        self.aborted = parsed_logfile_game.aborted;
-        self.id = parsed_logfile_game.id;
-        self.map = map.unwrap_or_default();
-        self.frames = parsed_logfile_game.frames;
-        self.ended_at = parsed_replay.date.clone();
-        self.players = players_with_extended_information;
-        self.messages = parsed_replay.messages;
-        self.actions = actions;
-        self.name = parsed_replay.name;
-        self.mod_chksum = parsed_replay.mod_chksum as usize;
-        self.mod_version = parsed_replay.mod_version as usize;
-        self.md5 = parsed_replay.md5;
-        self.date = parsed_replay.date.clone();
-        self.ticks = parsed_replay.ticks as usize;
-        self.status = "".into();
-        self.dev = None;
-        self.replay = None;
-        self.game = game;
-
-        self
-    }
-
-    pub fn copy_replay_file(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<&mut Self> {
-        let mut file_name = replay_file_path.clone();
-        let map_name = self.map.path.replace("DATA:maps\\pvp\\", "");
-
-        file_name.set_file_name(format!("{}_{}.rec", self.id, map_name));
-
-        let Ok(_) = fs::copy(replay_file_path, file_name) else {
-            return Err(ParserAppError::ParserLibError(
-                "Could not copy replay file".into(),
-            ));
-        };
-
-        Ok(self)
-    }
-
-    pub fn send_replay_to_server(&mut self) -> ParserAppResult<&mut Self> {
+        replay_file_path: &PathBuf,
+    ) -> ParserAppResult<&mut Self> {
         let client = reqwest::blocking::Client::new();
 
         let dto = ReplayReportDto::from(self);
+
+        self.transform_replay_to_base64(replay_file_path)?;
 
         let request = client
             .post("https://dow2elite.com/esl-report.php")
@@ -205,24 +145,40 @@ impl ExtendedGameInformation {
         Ok(self)
     }
 
-    pub fn transform_replay_to_base64(
-        &mut self,
-        replay_file_path: &PathBuf,
-    ) -> ParserAppResult<&mut Self> {
+    fn transform_replay_to_base64(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<()> {
         let bytes = fs::read(replay_file_path)?;
 
         self.replay = Some(base64::encode(bytes));
 
-        Ok(self)
+        Ok(())
     }
+}
 
-    pub fn notify_main_window(
-        &mut self,
-        main_window_handle: &WebviewWindow,
-    ) -> Result<(), tauri::Error> {
-        let json = serde_json::to_string_pretty(self)?;
-        main_window_handle.emit("new-game", json)
-    }
+pub fn copy_replay_file<'a>(
+    game_information: &'a ExtendedGameInformation,
+    replay_file_path: &'a PathBuf,
+) -> ParserAppResult<()> {
+    let mut file_name = replay_file_path.clone();
+    let map_name = game_information.map.path.replace("DATA:maps\\pvp\\", "");
+
+    file_name.set_file_name(format!("{}_{}.rec", game_information.id, map_name));
+
+    let Ok(_) = fs::copy(replay_file_path, file_name) else {
+        return Err(ParserAppError::ParserLibError(
+            "Could not copy replay file".into(),
+        ));
+    };
+
+    Ok(())
+}
+
+pub fn notify_main_window<'a>(
+    game_information: &'a ExtendedGameInformation,
+    main_window_handle: &'a WebviewWindow,
+) -> Result<(), tauri::Error> {
+    let json = serde_json::to_string_pretty(game_information)?;
+    tracing::debug!("Sending new game to main window");
+    main_window_handle.emit("new-game", json)
 }
 
 #[cfg(test)]
@@ -269,7 +225,9 @@ mod tests {
             ended_at: "".into(),
         };
 
-        let res = replay_info.send_replay_to_server();
-        assert!(res.is_ok());
+        let replay_file_path = PathBuf::new();
+
+        let res = replay_info.send_replay_to_server(&replay_file_path);
+        assert!(res.is_ok(), "{:#?}", res.err());
     }
 }

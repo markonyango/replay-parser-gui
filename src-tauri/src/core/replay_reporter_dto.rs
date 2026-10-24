@@ -100,6 +100,8 @@ impl ReplayReportDto {
                     relic_id: action.relic_id,
                     tick: action.tick,
                     data: action.data.clone(),
+                    command: None,
+                    command_error: None,
                 })
                 .collect(),
             dev: if let Some(dev) = replay.dev {

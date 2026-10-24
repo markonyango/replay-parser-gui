@@ -100,6 +100,12 @@ impl LogfilePlayerInfo {
 }
 
 impl ExtendedPlayerInformation {
+    /// Builds player information from the replay alone, leaving logfile-derived fields
+    /// (slot, steam id, sim id, status, race) at their defaults.
+    pub fn from_replay(replayfile_player: &chunky::Player) -> Self {
+        Self::from(&LogfilePlayerInfo::default(), replayfile_player)
+    }
+
     pub fn from(logfile_player: &LogfilePlayerInfo, replayfile_player: &chunky::Player) -> Self {
         Self {
             slot: logfile_player.slot,
