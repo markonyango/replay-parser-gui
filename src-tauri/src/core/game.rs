@@ -277,7 +277,7 @@ mod tests {
             "request did not carry the base64 replay"
         );
 
-        assert_eq!(game.status, r#"{"response":"ok"}"#);
+        assert_eq!(game.status, "ok");
     }
 
     #[test]
