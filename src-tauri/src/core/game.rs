@@ -17,13 +17,14 @@ use std::{
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
+    time::Duration,
 };
 use tauri::Emitter;
 use tauri::{Manager, WebviewWindow, Window};
 use thiserror::Error;
 use tracing::{debug, error, info};
 
-use crate::core::error::ParserAppError;
+use crate::core::error::{ParserAppError, UploadError};
 use crate::core::transformer::transform_player_information;
 
 use super::{
@@ -34,6 +35,7 @@ use super::{
 };
 
 const REPORT_URL: &str = "https://dow2elite.com/esl-report.php";
+const UPLOAD_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Default, Serialize)]
 pub struct ExtendedGameInformation {
@@ -122,44 +124,67 @@ impl ExtendedGameInformation {
         url: &str,
         replay_file_path: &PathBuf,
     ) -> ParserAppResult<&mut Self> {
-        let client = reqwest::blocking::Client::new();
-
+        // Without a readable replay there is nothing to report, so this stays a hard error.
         self.transform_replay_to_base64(replay_file_path)?;
 
-        let dto = ReplayReportDto::from(self);
+        let outcome = reqwest::blocking::Client::builder()
+            .timeout(UPLOAD_TIMEOUT)
+            .build()
+            .map_err(UploadError::Transport)
+            .and_then(|client| self.upload(&client, url));
 
-        let request = client.post(url).json(&dto).build()?;
-
-        match client.execute(request) {
-            Ok(response) => {
-                let response_body: StatusResponse = response.json()?;
-
-                debug!("The response message from the server: {:?}", response_body);
-
-                if let Some(response) = response_body.response {
-                    self.status = response;
-                } else if let Some(error) = response_body.error {
-                    self.status = error;
-                }
-
-                self.replay = None;
-            }
+        self.status = match outcome {
+            Ok(UploadOutcome::Accepted(message)) => message,
+            Ok(UploadOutcome::Rejected(message)) => message,
             Err(err) => {
-                error!("{:?}", err.to_string());
-                self.status = json!({ "error": err.to_string()}).to_string();
+                error!("Replay upload failed: {:?}", err);
+                json!({ "error": err.to_string() }).to_string()
             }
-        }
+        };
+
+        // Never hand the base64 payload on to the frontend, whatever the outcome.
+        self.replay = None;
 
         Ok(self)
     }
 
+    fn upload(
+        &self,
+        client: &reqwest::blocking::Client,
+        url: &str,
+    ) -> Result<UploadOutcome, UploadError> {
+        let response = client.post(url).json(&ReplayReportDto::from(self)).send()?;
+        let http_status = response.status();
+
+        let body: StatusResponse = response
+            .json()
+            .map_err(|e| UploadError::BadResponse(http_status, e.to_string()))?;
+
+        debug!("The response message from the server: {:?}", body);
+
+        match (body.response, body.error) {
+            (Some(message), _) if http_status.is_success() => Ok(UploadOutcome::Accepted(message)),
+            (_, Some(message)) => Ok(UploadOutcome::Rejected(message)),
+            _ => Err(UploadError::BadResponse(
+                http_status,
+                "response carried neither a message nor an error".into(),
+            )),
+        }
+    }
+
     fn transform_replay_to_base64(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<()> {
-        let bytes = fs::read(replay_file_path)?;
+        let bytes = fs::read(replay_file_path)
+            .map_err(|e| ParserAppError::TransformReplayToBase64(e.to_string()))?;
 
         self.replay = Some(base64::encode(bytes));
 
         Ok(())
     }
+}
+
+enum UploadOutcome {
+    Accepted(String),
+    Rejected(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -297,6 +322,30 @@ mod tests {
         .unwrap();
 
         assert!(game.status.contains("error"), "{}", game.status);
+    }
+
+    #[test]
+    fn records_error_and_drops_payload_when_response_is_not_json() {
+        let (url, _request) = serve_once("<html>502 Bad Gateway</html>");
+        let mut game = sample_game();
+
+        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+            .unwrap();
+
+        assert!(game.status.contains("error"), "{}", game.status);
+        assert!(game.replay.is_none());
+    }
+
+    #[test]
+    fn records_server_error_message() {
+        let (url, _request) = serve_once(r#"{"error":"bad replay"}"#);
+        let mut game = sample_game();
+
+        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+            .unwrap();
+
+        assert_eq!(game.status, "bad replay");
+        assert!(game.replay.is_none());
     }
 
     #[test]

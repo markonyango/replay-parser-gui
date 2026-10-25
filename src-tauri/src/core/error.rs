@@ -15,8 +15,20 @@ pub enum ParserAppError {
     LogfileParseError(String),
     #[error("Could not find replay file")]
     ReplayNotFoundError,
+    #[error("Could not transform replay to base64: {0}")]
+    TransformReplayToBase64(String),
     #[error("Generic error: {0}")]
     GenericError(String),
+}
+
+/// Failures while reporting a replay to the remote server. These are recorded
+/// in the game's `status` rather than propagated.
+#[derive(Debug, thiserror::Error)]
+pub enum UploadError {
+    #[error("Could not reach the server: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("Unexpected server response (HTTP {0}): {1}")]
+    BadResponse(reqwest::StatusCode, String),
 }
 
 pub type ParserAppResult<T, E = ParserAppError> = color_eyre::Result<T, E>;
