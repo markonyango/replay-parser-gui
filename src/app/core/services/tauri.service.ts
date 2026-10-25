@@ -55,7 +55,14 @@ export class TauriService {
             this.json_store.set(store);
             this.json_store()
                 ?.get<MatchItem[]>('matches')
-                .then((matches) => this.matches_state.set(matches ?? []));
+                .then((matches) => {
+                    if (matches) {
+                        this.matches_state.set(matches ?? []);
+                        matches.forEach((match) =>
+                            this.knownMatchIDs.add(match.match_id)
+                        );
+                    }
+                });
         });
     }
 
@@ -67,7 +74,10 @@ export class TauriService {
         // write data to the ui state only when updating the state on disk was successful
         this.json_store()
             ?.set('matches', filteredMatches)
-            .then(() => this.matches_state.set(filteredMatches));
+            .then(() => {
+                this.matches_state.set(filteredMatches);
+                this.knownMatchIDs.delete(id);
+            });
     }
 }
 
