@@ -21,7 +21,7 @@ use std::{
 use tauri::Emitter;
 use tauri::{Manager, WebviewWindow, Window};
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::core::error::ParserAppError;
 use crate::core::transformer::transform_player_information;
@@ -128,21 +128,19 @@ impl ExtendedGameInformation {
 
         let dto = ReplayReportDto::from(self);
 
-        let request = client
-            .post(url)
-            .json(&dto)
-            .build()?;
+        let request = client.post(url).json(&dto).build()?;
 
         match client.execute(request) {
             Ok(response) => {
-                let response_body = response.text();
-                info!("The response message from the server: {:?}", response_body);
-                match response_body {
-                    Ok(body) if body.contains("error") => self.status = body,
-                    Ok(body) if !body.contains("error") => self.status = body,
-                    Ok(_) => self.status = json!({ "response": "ok" }).to_string(),
-                    Err(error) => self.status = error.to_string(),
-                };
+                let response_body: StatusResponse = response.json()?;
+
+                debug!("The response message from the server: {:?}", response_body);
+
+                if let Some(response) = response_body.response {
+                    self.status = response;
+                } else if let Some(error) = response_body.error {
+                    self.status = error;
+                }
 
                 self.replay = None;
             }
@@ -162,6 +160,12 @@ impl ExtendedGameInformation {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct StatusResponse {
+    response: Option<String>,
+    error: Option<String>,
 }
 
 pub fn copy_replay_file<'a>(
