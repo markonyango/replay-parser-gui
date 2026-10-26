@@ -19,6 +19,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Angular production build
+        run: npx ng build
+
       - name: Angular unit tests
         run: npx ng test --watch=false --browsers=ChromeHeadlessNoSandbox
 
@@ -37,6 +40,8 @@ jobs:
             libayatana-appindicator3-dev librsvg2-dev
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - uses: swatinem/rust-cache@v2
         with:
@@ -45,6 +50,14 @@ jobs:
       # Tauri's build script only needs the frontend directory to exist.
       - name: Stub frontend dist
         run: mkdir -p dist/eslreporter/browser
+
+      - name: Check formatting
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Rust unit tests
         working-directory: src-tauri
