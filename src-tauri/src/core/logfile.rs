@@ -90,18 +90,22 @@ impl LogfileGameList {
         tracing::debug!("Reading logfile");
         if !logfilepath.exists() {
             tracing::error!("Could not find logfile!");
-            return Err(ParserAppError::LogfileNotFoundError);
+            return Err(ParserAppError::LogfileNotFound);
         }
 
         // Rust can not directly read from this file since it is not UTF-8 encoded
-        let logfile = File::open(logfilepath)?;
+        let read_error = |source| ParserAppError::LogfileRead {
+            path: logfilepath.to_path_buf(),
+            source,
+        };
+        let logfile = File::open(logfilepath).map_err(read_error)?;
         let mut reader = DecodeReaderBytesBuilder::new()
             .encoding(Some(encoding_rs::UTF_8))
             .build(logfile);
 
         let mut buffer = vec![];
 
-        reader.read_to_end(&mut buffer)?;
+        reader.read_to_end(&mut buffer).map_err(read_error)?;
 
         let result = String::from_utf8(buffer)?
             .lines()
@@ -141,7 +145,7 @@ impl LogfileGameList {
 
             if match_captures.len() != 1 {
                 tracing::error!("Found more than 1 game to parse");
-                return Err(ParserAppError::LogfileParseError(
+                return Err(ParserAppError::LogfileParse(
                     "Found more than 1 game to parse".into(),
                 ));
             }
@@ -152,21 +156,21 @@ impl LogfileGameList {
                 0 => {
                     let Some(uid) = match_group.captures.get(1) else {
                         tracing::error!("Could not parse user id from match header block");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse user id from match header block".into(),
                         ));
                     };
 
                     let Some(steam_id) = match_group.captures.get(2) else {
                         tracing::error!("Could not parse steam id from match header block");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse steam id from match header block".into(),
                         ));
                     };
 
                     let Some(slot) = match_group.captures.get(3) else {
                         tracing::error!("Could not parse slot number from match header block");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse slot number from match header block".into(),
                         ));
                     };
@@ -202,7 +206,7 @@ impl LogfileGameList {
                     // At this point there should be a game in the list
                     let Some(map) = match_group.captures.get(1) else {
                         tracing::error!("Could not parse map from logfile");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse map from logfile".into(),
                         ));
                     };
@@ -265,14 +269,14 @@ impl LogfileGameList {
                     if let Some(last_game) = self.games.last_mut() {
                         let Some(match_relic_id) = match_group.captures.get(1) else {
                             tracing::error!("Could not extract match relic id from logfile");
-                            return Err(ParserAppError::LogfileParseError(
+                            return Err(ParserAppError::LogfileParse(
                                 "Could not extract match relic id from logfile".into(),
                             ));
                         };
 
                         let Ok(match_relic_id) = match_relic_id.as_str().parse::<usize>() else {
                             tracing::error!("Could not parse match relic id in logfile");
-                            return Err(ParserAppError::LogfileParseError(
+                            return Err(ParserAppError::LogfileParse(
                                 "Could not parse match relic id in logfile".into(),
                             ));
                         };
@@ -316,14 +320,14 @@ impl LogfileGameList {
                     if let Some(last_game) = self.games.last_mut() {
                         let Some(frames) = match_group.captures.get(1) else {
                             tracing::error!("Could not extract number of frames from logfile");
-                            return Err(ParserAppError::LogfileParseError(
+                            return Err(ParserAppError::LogfileParse(
                                 "Could not extract number of frames from logfile".into(),
                             ));
                         };
 
                         let Ok(frames) = frames.as_str().parse::<usize>() else {
                             tracing::error!("Could not parse number of frames from logfile");
-                            return Err(ParserAppError::LogfileParseError(
+                            return Err(ParserAppError::LogfileParse(
                                 "Could not parse number of frames from logfile".into(),
                             ));
                         };
@@ -336,14 +340,14 @@ impl LogfileGameList {
                 8 => {
                     let Some(relic_id) = match_group.captures.get(1) else {
                         tracing::error!("Could not parse relic id from logfile");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse relic id from logfile".into(),
                         ));
                     };
 
                     let Some(steam_id) = match_group.captures.get(2) else {
                         tracing::error!("Could not parse steam id from logfile");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "Could not parse steam id from logfile".into(),
                         ));
                     };
@@ -366,7 +370,7 @@ impl LogfileGameList {
                 9 => {
                     let Some(steam_id) = match_group.captures.get(1) else {
                         tracing::error!("Could not find player profile steam id in logfile");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "could not find player profile steam id in logfile".into(),
                         ));
                     };
@@ -377,14 +381,14 @@ impl LogfileGameList {
                         self.steam_id = steam_id;
                     } else {
                         tracing::error!("Could not read player profile steam id from logfile");
-                        return Err(ParserAppError::LogfileParseError(
+                        return Err(ParserAppError::LogfileParse(
                             "could not read player profile steam id from logfile".into(),
                         ));
                     }
                 }
                 capture_group => {
                     tracing::error!("RegEx error while parsing logfile: {:?}", capture_group);
-                    return Err(ParserAppError::LogfileParseError(format!(
+                    return Err(ParserAppError::LogfileParse(format!(
                         "RegEx error while parsing logfile: {}",
                         capture_group
                     )));
@@ -418,6 +422,21 @@ mod tests {
         game_list.read_logfile(logfilepath).unwrap();
 
         assert_eq!(game_list.logfile_content.len(), 241);
+    }
+
+    #[test]
+    fn read_error_keeps_the_io_cause() {
+        // A directory exists but cannot be read as a file.
+        let logfilepath = std::env::temp_dir();
+        let mut game_list = LogfileGameList::new();
+
+        let err = game_list.read_logfile(&logfilepath).unwrap_err();
+
+        let ParserAppError::LogfileRead { path, source } = err else {
+            panic!("unexpected error: {err:?}");
+        };
+        assert_eq!(path, logfilepath);
+        assert!(std::error::Error::source(&ParserAppError::LogfileRead { path, source }).is_some());
     }
 
     #[test]

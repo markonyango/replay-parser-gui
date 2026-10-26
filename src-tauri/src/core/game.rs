@@ -176,8 +176,10 @@ impl ExtendedGameInformation {
     }
 
     fn transform_replay_to_base64(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<()> {
-        let bytes = fs::read(replay_file_path)
-            .map_err(|e| ParserAppError::TransformReplayToBase64(e.to_string()))?;
+        let bytes = fs::read(replay_file_path).map_err(|source| ParserAppError::ReplayRead {
+            path: replay_file_path.clone(),
+            source,
+        })?;
 
         self.replay = Some(base64::encode(bytes));
 

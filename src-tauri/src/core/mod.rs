@@ -38,9 +38,7 @@ pub fn parse_logfile(logfile_path: &Path) -> error::ParserAppResult<LogfileGameI
     game_list.parse()?;
 
     let Some(last_game) = game_list.games.last() else {
-        return Err(ParserAppError::ParserLibError(
-            "Could not get last game from list of games in logfile".into(),
-        ));
+        return Err(ParserAppError::NoGameInLogfile);
     };
 
     Ok(last_game.to_owned())
@@ -51,7 +49,8 @@ fn parse_replay_file(replay_file_path: &Path) -> ParserAppResult<ReplayInfo> {
     let replay_file_path = replay_file_path
         .to_str()
         .ok_or_else(|| ParserAppError::NonUtf8ReplayPath(replay_file_path.to_path_buf()))?;
-    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_owned())?;
+    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_owned())
+        .map_err(|e| ParserAppError::ReplayParse(e.into()))?;
     Ok(parsed_replay)
 }
 
@@ -100,7 +99,10 @@ fn ensure_same_match(replay: &ReplayInfo, logfile_game: &LogfileGameInfo) -> Par
 
 pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     let game_dir = paths::resolve_game_dir(
-        &handle.path().document_dir()?,
+        &handle
+            .path()
+            .document_dir()
+            .map_err(ParserAppError::DocumentDir)?,
         handle.path().home_dir().ok().as_deref(),
     );
 
@@ -134,11 +136,11 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     }
 
     if !logfile_found {
-        return Err(ParserAppError::LogfileNotFoundError);
+        return Err(ParserAppError::LogfileNotFound);
     }
 
     if !playback_found {
-        return Err(ParserAppError::ReplayNotFoundError);
+        return Err(ParserAppError::ReplayFolderNotFound);
     }
 
     Ok(InputFiles {
@@ -202,9 +204,7 @@ impl GameDataProblem {
 
 pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
     let Some(main_window_handle) = handle.get_webview_window("main") else {
-        return Err(ParserAppError::GenericError(
-            "Could not acquire main window handle. This is unrecoverable".into(),
-        ));
+        return Err(ParserAppError::MainWindowMissing);
     };
 
     let (tx, rx) = std::sync::mpsc::channel();
@@ -217,9 +217,9 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx)?;
 
-    let watch_dir = replay_file_path.parent().ok_or_else(|| {
-        ParserAppError::GenericError("Replay path has no parent directory".into())
-    })?;
+    let watch_dir = replay_file_path
+        .parent()
+        .ok_or_else(|| ParserAppError::NoReplayFolder(replay_file_path.clone()))?;
 
     debouncer
         .watcher()
@@ -230,7 +230,8 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
     for events in rx {
         // The directory also reports other files in Playback/; only react to temp.rec.
         // One debounced batch triggers a single upload, however many events it holds.
-        if !events?.iter().any(|e| e.path == replay_file_path) {
+        let events = events.map_err(ParserAppError::WatchEvents)?;
+        if !events.iter().any(|e| e.path == replay_file_path) {
             continue;
         }
 
@@ -268,7 +269,7 @@ fn process_replay(
 
     Chain::with_defaults(steam_game_location)
         .run(&mut replay_file_info)
-        .map_err(|e| ParserAppError::ParserLibError(format!("{e:?}")))?;
+        .map_err(ParserAppError::ReplayEnrich)?;
 
     ensure_same_match(&replay_file_info, &logfile_game_info)?;
 
@@ -302,7 +303,7 @@ fn process_replay(
     );
     set_text(handle, text);
 
-    notify_main_window(&replay_info, main_window_handle)?;
+    notify_main_window(&replay_info, main_window_handle).map_err(ParserAppError::NotifyWindow)?;
 
     Ok(())
 }

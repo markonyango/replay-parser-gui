@@ -1,34 +1,61 @@
-use std::{convert::Infallible, path::PathBuf, string::FromUtf8Error};
+use std::{error::Error as StdError, path::PathBuf, string::FromUtf8Error};
 
-use color_eyre::Report;
-use serde::{Serialize, Serializer};
-
+/// Errors of the replay watcher.
+///
+/// Setup errors (`LogfileNotFound` to `WatchEvents`) stop the watcher; everything else
+/// concerns a single replay, which is skipped.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-#[allow(clippy::enum_variant_names)]
 pub enum ParserAppError {
-    #[error("Parser lib error: {0}")]
-    ParserLibError(String),
     #[error("Could not find logfile")]
-    LogfileNotFoundError,
+    LogfileNotFound,
+    #[error("Could not find replay folder")]
+    ReplayFolderNotFound,
+    #[error("Could not resolve the documents folder: {0}")]
+    DocumentDir(#[source] tauri::Error),
+    #[error("Could not acquire main window handle")]
+    MainWindowMissing,
+    #[error("Replay path has no parent directory: {}", .0.display())]
+    NoReplayFolder(PathBuf),
+    #[error("Could not watch the replay folder: {0}")]
+    Watch(#[from] notify::Error),
+    #[error("File watcher failed: {}", join(.0))]
+    WatchEvents(Vec<notify::Error>),
+
+    #[error("Could not read logfile {}: {source}", .path.display())]
+    LogfileRead {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("Logfile is not valid UTF-8: {0}")]
+    LogfileEncoding(#[from] FromUtf8Error),
     #[error("Error while parsing logfile: {0}")]
-    LogfileParseError(String),
-    #[error("Could not find replay file")]
-    ReplayNotFoundError,
+    LogfileParse(String),
+    #[error("Logfile contains no game")]
+    NoGameInLogfile,
     #[error("Replay path is not valid UTF-8: {}", .0.display())]
     NonUtf8ReplayPath(PathBuf),
+    #[error("Could not parse replay: {0}")]
+    ReplayParse(#[source] Box<dyn StdError + Send + Sync>),
+    #[error("Could not resolve replay details: {0}")]
+    ReplayEnrich(String),
     #[error("Replay and logfile describe different matches: {0}")]
     MatchMismatch(String),
-    #[error("Could not transform replay to base64: {0}")]
-    TransformReplayToBase64(String),
+    #[error("Could not read replay {}: {source}", .path.display())]
+    ReplayRead {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("Could not copy replay file to {}: {source}", .target.display())]
     CopyReplayFile {
         target: PathBuf,
         #[source]
         source: std::io::Error,
     },
-    #[error("Generic error: {0}")]
-    GenericError(String),
+    #[error("Could not send game to the main window: {0}")]
+    NotifyWindow(#[source] tauri::Error),
 }
 
 /// Failures while reporting a replay to the remote server. These are recorded
@@ -41,67 +68,12 @@ pub enum UploadError {
     BadResponse(reqwest::StatusCode, String),
 }
 
-pub type ParserAppResult<T, E = ParserAppError> = color_eyre::Result<T, E>;
+pub type ParserAppResult<T, E = ParserAppError> = Result<T, E>;
 
-impl Serialize for ParserAppError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(self.to_string().as_ref())
-    }
-}
-
-impl From<std::io::Error> for ParserAppError {
-    fn from(e: std::io::Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<FromUtf8Error> for ParserAppError {
-    fn from(e: FromUtf8Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<notify::Error> for ParserAppError {
-    fn from(e: notify::Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<tauri::Error> for ParserAppError {
-    fn from(e: tauri::Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<serde_json::Error> for ParserAppError {
-    fn from(e: serde_json::Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<reqwest::Error> for ParserAppError {
-    fn from(e: reqwest::Error) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<Vec<notify::Error>> for ParserAppError {
-    fn from(_: Vec<notify::Error>) -> Self {
-        ParserAppError::GenericError("Notify error".into())
-    }
-}
-
-impl From<Infallible> for ParserAppError {
-    fn from(e: Infallible) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
-}
-
-impl From<Report> for ParserAppError {
-    fn from(e: Report) -> Self {
-        ParserAppError::GenericError(e.to_string())
-    }
+fn join(errors: &[notify::Error]) -> String {
+    errors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ")
 }
