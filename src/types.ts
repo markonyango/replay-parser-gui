@@ -57,7 +57,7 @@ export type PlayerInfo = {
   slot: number;
   steam_id: number;
   sim_id: number;
-  status: 'Killed' | 'Dropped' | 'Conceded' | 'Won' | 'Playing';
+  status: 'Unknown' | 'Won' | 'Conceded' | 'Killed' | 'Playing' | 'Outofsync' | 'Dropped';
   name: string;
   kind: number;
   team: number;

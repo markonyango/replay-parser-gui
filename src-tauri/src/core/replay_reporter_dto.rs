@@ -7,6 +7,11 @@ use super::{
     player_info::{ExtendedPlayerInformation, LogfilePlayerStatus},
 };
 
+/// Sent when no player won. esl-report.php stores `winner + 1`, and the stored 0
+/// means "winner cannot be determined", so ratings are left untouched. It also
+/// matches no team, so no player gets a win.
+const UNKNOWN_WINNER: i32 = -1;
+
 #[derive(Debug, Serialize)]
 pub struct ReplayReportDto {
     aborted: bool,
@@ -24,7 +29,7 @@ pub struct ReplayReportDto {
     players: Vec<ReplayReporterPlayerDto>,
     messages: Vec<ReplayReporterMessageDto>,
     // observers: Vec<>
-    winner: usize,
+    winner: i32,
 }
 
 #[derive(Debug, Serialize)]
@@ -87,8 +92,7 @@ impl ReplayReportDto {
             .players
             .iter()
             .find(|player| matches!(player.status, LogfilePlayerStatus::Won))
-            .map(|player| player.team)
-            .unwrap_or(0);
+            .map_or(UNKNOWN_WINNER, |player| player.team as i32);
 
         Self {
             aborted: replay.aborted,
@@ -135,7 +139,46 @@ impl ReplayReportDto {
                 .iter()
                 .map(ReplayReporterMessageDto::from)
                 .collect(),
-            winner: winner as usize,
+            winner,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn game_with(statuses: &[(u32, LogfilePlayerStatus)]) -> ExtendedGameInformation {
+        ExtendedGameInformation {
+            players: statuses
+                .iter()
+                .map(|(team, status)| ExtendedPlayerInformation {
+                    team: *team,
+                    status: status.clone(),
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn reports_team_of_winning_player() {
+        let game = game_with(&[
+            (0, LogfilePlayerStatus::Killed),
+            (1, LogfilePlayerStatus::Won),
+        ]);
+
+        assert_eq!(ReplayReportDto::from(&game).winner, 1);
+    }
+
+    #[test]
+    fn reports_unknown_winner_when_nobody_won() {
+        let game = game_with(&[
+            (0, LogfilePlayerStatus::Unknown),
+            (1, LogfilePlayerStatus::Playing),
+        ]);
+
+        assert_eq!(ReplayReportDto::from(&game).winner, UNKNOWN_WINNER);
     }
 }

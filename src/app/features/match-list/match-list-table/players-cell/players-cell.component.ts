@@ -30,5 +30,6 @@ export class PlayersCellComponent implements ICellRendererAngularComp {
     .map((player) => player.name)
     .join(', '));
 
-  winner = computed(() => this.players().find(player => player.status === 'Won')?.team ?? 0);
+  /** Team of the winning player, or null when nobody won (aborted or unresolved game). */
+  winner = computed(() => this.players().find(player => player.status === 'Won')?.team ?? null);
 }

@@ -51,6 +51,25 @@ describe('MatchDetailsComponent', () => {
     expect(text).toContain('Actions (0)');
   });
 
+  it('marks the team of the winning player', async () => {
+    await create(matchItem());
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).toContain('Winners:');
+    expect(text).toContain('Defeated:');
+  });
+
+  it('shows no result when nobody won', async () => {
+    await create(matchItem({
+      players: [player('Alice', 0, 'Unknown'), player('Bob', 1, 'Playing')],
+    }));
+
+    const text: string = fixture.nativeElement.textContent;
+    expect(text).not.toContain('Winners:');
+    expect(text).not.toContain('Defeated:');
+    expect(text).not.toContain('\u{1F3C6}');
+  });
+
   it('filters messages by search text', async () => {
     await create(matchItem());
 

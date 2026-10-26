@@ -43,8 +43,10 @@ const TEAM_STYLES = [
                         <span class="text-[color:var(--c-parchment-dim)]">vs.</span>
                     }
                     <div class="flex flex-wrap items-center gap-1">
-                        <span aria-hidden="true">{{ team.won ? '&#127942;' : '&#9760;' }}</span>
-                        <span class="sr-only">{{ team.won ? 'Winners:' : 'Defeated:' }}</span>
+                        @if (team.won !== null) {
+                            <span aria-hidden="true">{{ team.won ? '&#127942;' : '&#9760;' }}</span>
+                            <span class="sr-only">{{ team.won ? 'Winners:' : 'Defeated:' }}</span>
+                        }
                         @for (player of team.players; track player.slot) {
                             <span class="rounded-sm px-2 py-0.5" [class]="team.style.chip">
                                 {{ player.name }}
@@ -269,10 +271,11 @@ export class MatchDetailsComponent {
     }
 
     private buildTeams(players: PlayerInfo[]) {
-        const winningTeam = players.find((p) => p.status === 'Won')?.team ?? 0;
+        // No winner (aborted or unresolved game): leave the result open instead of guessing.
+        const winningTeam = players.find((p) => p.status === 'Won')?.team;
         return [0, 1].map((index) => ({
             index,
-            won: index === winningTeam,
+            won: winningTeam === undefined ? null : index === winningTeam,
             style: TEAM_STYLES[index],
             players: players.filter((p) => p.team === index),
         }));
