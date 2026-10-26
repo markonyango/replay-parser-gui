@@ -4,13 +4,14 @@ use color_eyre::{eyre::eyre, Help, Report, Result};
 use encoding_rs_io::DecodeReaderBytesBuilder;
 use lazy_static::lazy_static;
 use parser_lib::{
-    actions::Action,
+    actions::{Action, Command},
+    blueprints::ResolvedBlueprint,
     chunky::{Chunk, Game as ReplayGame, Map, Player},
     message::Message,
     replay::ReplayInfo,
 };
 use regex::{Captures, Regex, RegexSet};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use serde_json::json;
 use std::{
     collections::HashMap,
@@ -50,6 +51,7 @@ pub struct ExtendedGameInformation {
     pub map: Map,
     pub players: Vec<ExtendedPlayerInformation>,
     pub messages: Vec<Message>,
+    #[serde(serialize_with = "serialize_actions_for_frontend")]
     pub actions: Vec<Action>,
     pub aborted: bool,
     pub frames: usize,
@@ -66,6 +68,62 @@ pub struct GameInfo {
     pub resources: String,
     pub locations: String,
     pub victory_points: usize,
+}
+
+/// What the frontend stores per action. The upload sends the full `Action` via `ReplayReportDto`.
+///
+/// This is an allowlist on purpose: a new `parser_lib` field only reaches store.json once added here.
+#[derive(Serialize)]
+struct ActionView<'a> {
+    relic_id: u64,
+    name: &'a str,
+    tick: u32,
+    command: Option<CommandView<'a>>,
+    command_error: Option<&'a str>,
+}
+
+impl<'a> From<&'a Action> for ActionView<'a> {
+    fn from(action: &'a Action) -> Self {
+        Self {
+            relic_id: action.relic_id,
+            name: &action.player,
+            tick: action.tick,
+            command: action.command.as_ref().map(CommandView::from),
+            command_error: action.command_error.as_deref(),
+        }
+    }
+}
+
+/// `Command` without the raw context, receivers and custom payload bytes.
+#[derive(Serialize)]
+struct CommandView<'a> {
+    opcode: u8,
+    opcode_name: Option<&'static str>,
+    sender_flags: u8,
+    sender_slot: u8,
+    process_type: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    blueprint: Option<&'a ResolvedBlueprint>,
+}
+
+impl<'a> From<&'a Command> for CommandView<'a> {
+    fn from(command: &'a Command) -> Self {
+        Self {
+            opcode: command.opcode.value(),
+            opcode_name: command.opcode.name(),
+            sender_flags: command.sender_flags,
+            sender_slot: command.sender_slot,
+            process_type: command.process_type,
+            blueprint: command.blueprint.as_ref(),
+        }
+    }
+}
+
+fn serialize_actions_for_frontend<S: Serializer>(
+    actions: &[Action],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(actions.iter().map(ActionView::from))
 }
 
 impl From<ReplayGame> for GameInfo {
@@ -243,9 +301,8 @@ pub fn notify_main_window<'a>(
     game_information: &'a ExtendedGameInformation,
     main_window_handle: &'a WebviewWindow,
 ) -> Result<(), tauri::Error> {
-    let json = serde_json::to_string_pretty(game_information)?;
     tracing::debug!("Sending new game to main window");
-    main_window_handle.emit("new-game", json)
+    main_window_handle.emit("new-game", game_information)
 }
 
 #[cfg(test)]
@@ -417,6 +474,49 @@ mod tests {
             }),
             json!({ "kind": "failed", "reason": "timeout" })
         );
+    }
+
+    #[test]
+    fn frontend_payload_keeps_only_allowlisted_action_fields() {
+        let replay = crate::core::parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
+        let action = replay
+            .actions
+            .iter()
+            .find(|a| a.command.is_some())
+            .expect("fixture has a decoded command")
+            .clone();
+        let game = ExtendedGameInformation {
+            actions: vec![action],
+            ..sample_game()
+        };
+
+        let json = serde_json::to_value(&game).unwrap();
+        let action = &json["actions"][0];
+        let keys = |v: &serde_json::Value| {
+            let mut keys: Vec<_> = v.as_object().unwrap().keys().cloned().collect();
+            keys.sort();
+            keys
+        };
+
+        assert_eq!(
+            keys(action),
+            ["command", "command_error", "name", "relic_id", "tick"]
+        );
+        let mut command_keys = keys(&action["command"]);
+        command_keys.retain(|k| k != "blueprint");
+        assert_eq!(
+            command_keys,
+            [
+                "opcode",
+                "opcode_name",
+                "process_type",
+                "sender_flags",
+                "sender_slot"
+            ]
+        );
+        // The upload still carries the raw bytes the frontend no longer gets.
+        let upload = serde_json::to_value(ReplayReportDto::from(&game)).unwrap();
+        assert!(!upload["actions"][0]["data"].as_array().unwrap().is_empty());
     }
 
     fn temp_dir(tag: &str) -> PathBuf {

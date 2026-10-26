@@ -23,8 +23,8 @@ export class TauriService {
     public matchList = computed(() => this.matches_state());
 
     constructor() {
-        appWindow.listen<string>('new-game', (event) => {
-            let json: ReplayInfo = JSON.parse(event.payload);
+        appWindow.listen<ReplayInfo>('new-game', (event) => {
+            const json = event.payload;
 
             // Do not add existing matches multiple times
             if (this.knownMatchIDs.has(json.id)) {

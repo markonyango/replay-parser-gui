@@ -89,5 +89,4 @@ export type ActionInfo = {
   relic_id: number;
   name: string;
   tick: number;
-  data: Array<number>;
 };

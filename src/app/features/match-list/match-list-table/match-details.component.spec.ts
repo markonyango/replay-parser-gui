@@ -94,7 +94,7 @@ describe('MatchDetailsComponent', () => {
   it('opens on the actions tab when there are no messages', async () => {
     await create(matchItem({
       messages: [],
-      actions: [{ relic_id: 1, name: 'Alice', tick: 10, data: [] }],
+      actions: [{ relic_id: 1, name: 'Alice', tick: 10 }],
     }));
 
     expect(fixture.nativeElement.textContent).toContain('Actions (1)');
@@ -105,9 +105,9 @@ describe('MatchDetailsComponent', () => {
     await create(matchItem({
       messages: [],
       actions: [
-        { relic_id: 1, name: 'Alice', tick: 10, data: [] },
-        { relic_id: 2, name: 'Bob', tick: 20, data: [] },
-        { relic_id: 2, name: 'Bob', tick: 30, data: [] },
+        { relic_id: 1, name: 'Alice', tick: 10 },
+        { relic_id: 2, name: 'Bob', tick: 20 },
+        { relic_id: 2, name: 'Bob', tick: 30 },
       ],
     }));
 
