@@ -30,6 +30,8 @@ describe('TauriService', () => {
       messages: [],
       actions: [{ relic_id: 1, name: 'Alice', tick: 10, command: null, command_error: null }],
     } as unknown as ReplayInfo);
+    // The handler waits for the store load before adding the match.
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     const [match] = service.matchList();
     expect(match.match_id).toBe(42);

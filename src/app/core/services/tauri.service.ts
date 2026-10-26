@@ -22,26 +22,20 @@ export class TauriService {
 
     public matchList = computed(() => this.matches_state());
 
+    // Resolves (never rejects) once the persisted matches have been loaded.
+    private storeReady: Promise<void>;
+
     constructor() {
-        appWindow.listen<ReplayInfo>('new-game', (event) => {
-            const json = event.payload;
+        this.storeReady = this.loadStore();
 
-            // Do not add existing matches multiple times
-            if (this.knownMatchIDs.has(json.id)) {
-                return;
-            }
-
-            this.matches_state.update((state) => {
-                let match = mapJsonToVM(json);
-                this.knownMatchIDs.add(match.match_id);
-
-                // write matches to json store for permanent storage
-                this.json_store()?.set('matches', [match, ...state]);
-
-                // write matches to local state for ui
-                return [match, ...state];
-            });
-        });
+        // Events wait for the store so they are neither lost nor overwritten by the initial load.
+        appWindow
+            .listen<ReplayInfo>('new-game', (event) => {
+                this.storeReady.then(() => this.addMatch(event.payload));
+            })
+            .catch((error) =>
+                console.error('Could not listen for new games', error)
+            );
 
         appWindow
             .listen<StatusSnapshot>('status-changed', (event) =>
@@ -51,26 +45,51 @@ export class TauriService {
             .then(() => invoke<StatusSnapshot>('get_status'))
             .then((snapshot) => this.status.apply(snapshot))
             .catch((error) => console.error('Could not load status', error));
+    }
 
-        load('store.json').then((store) => {
+    private async loadStore() {
+        try {
+            const store = await load('store.json');
             this.json_store.set(store);
-            this.json_store()
-                ?.get<StoredMatch[]>('matches')
-                .then((stored) => {
-                    if (stored) {
-                        const matches = stored.map(migrateStoredMatch);
-                        this.matches_state.set(matches);
-                        matches.forEach((match) =>
-                            this.knownMatchIDs.add(match.match_id)
-                        );
 
-                        // Persist migrations once so old entries stop carrying legacy data.
-                        if (matches.some((match, i) => match !== stored[i])) {
-                            store.set('matches', matches);
-                        }
-                    }
-                });
-        });
+            const stored = await store.get<StoredMatch[]>('matches');
+            if (stored) {
+                const matches = stored.map(migrateStoredMatch);
+                this.matches_state.set(matches);
+                matches.forEach((match) =>
+                    this.knownMatchIDs.add(match.match_id)
+                );
+
+                // Persist migrations once so old entries stop carrying legacy data.
+                if (matches.some((match, i) => match !== stored[i])) {
+                    await store.set('matches', matches);
+                }
+            }
+        } catch (error) {
+            console.error('Could not load stored matches', error);
+        }
+    }
+
+    private async addMatch(json: ReplayInfo) {
+        // Do not add existing matches multiple times
+        if (this.knownMatchIDs.has(json.id)) {
+            return;
+        }
+
+        const match = mapJsonToVM(json);
+        this.knownMatchIDs.add(match.match_id);
+
+        const matches = [match, ...this.matches_state()];
+
+        // write matches to local state for ui
+        this.matches_state.set(matches);
+
+        // write matches to json store for permanent storage
+        try {
+            await this.json_store()?.set('matches', matches);
+        } catch (error) {
+            console.error('Could not persist match', error);
+        }
     }
 
     delete_match(id: number) {
@@ -84,7 +103,8 @@ export class TauriService {
             .then(() => {
                 this.matches_state.set(filteredMatches);
                 this.knownMatchIDs.delete(id);
-            });
+            })
+            .catch((error) => console.error('Could not delete match', error));
     }
 }
 
