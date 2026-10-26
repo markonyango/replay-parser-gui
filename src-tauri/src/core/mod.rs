@@ -46,8 +46,12 @@ pub fn parse_logfile(logfile_path: &Path) -> error::ParserAppResult<LogfileGameI
     Ok(last_game.to_owned())
 }
 
-fn parse_replay_file(replay_file_path: String) -> ParserAppResult<ReplayInfo> {
-    let parsed_replay = parser_lib::parse_raw(replay_file_path)?;
+fn parse_replay_file(replay_file_path: &Path) -> ParserAppResult<ReplayInfo> {
+    // parser_lib only takes a String; a lossy path would point at a different file.
+    let replay_file_path = replay_file_path
+        .to_str()
+        .ok_or_else(|| ParserAppError::NonUtf8ReplayPath(replay_file_path.to_path_buf()))?;
+    let parsed_replay = parser_lib::parse_raw(replay_file_path.to_owned())?;
     Ok(parsed_replay)
 }
 
@@ -163,7 +167,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         .transpose()
         .map_err(|_e| ParserAppError::GenericError("Steam location not found".to_string()))?;
 
-    let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx).unwrap();
+    let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx)?;
 
     let watch_dir = replay_file_path.parent().ok_or_else(|| {
         ParserAppError::GenericError("Replay path has no parent directory".into())
@@ -212,7 +216,7 @@ fn process_replay(
     let logfile_game_info = parse_logfile(logfile_path)?;
 
     debug!("Parsing replay file: {:?}", replay_file_path);
-    let mut replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
+    let mut replay_file_info = parse_replay_file(replay_file_path)?;
 
     Chain::with_defaults(steam_game_location)
         .run(&mut replay_file_info)
@@ -287,7 +291,7 @@ mod tests {
 
     #[test]
     fn accepts_logfile_game_with_the_replays_players() {
-        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let replay = parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
         let mut relic_ids = replay_relic_ids(&replay);
         relic_ids.reverse();
         // AI and unresolved dropped players carry relic id 0 and are ignored.
@@ -298,7 +302,7 @@ mod tests {
 
     #[test]
     fn accepts_replay_with_players_the_logfile_could_not_resolve() {
-        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let replay = parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
         let relic_ids = replay_relic_ids(&replay);
 
         let logfile = logfile_game(relic_ids.into_iter().skip(1));
@@ -308,7 +312,7 @@ mod tests {
 
     #[test]
     fn rejects_logfile_game_with_a_player_not_in_the_replay() {
-        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let replay = parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
         let mut relic_ids = replay_relic_ids(&replay);
         relic_ids[0] = 1;
 
@@ -319,7 +323,7 @@ mod tests {
 
     #[test]
     fn rejects_logfile_game_without_known_players() {
-        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let replay = parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
 
         // E.g. the newest game block before its results were written.
         for logfile in [logfile_game([]), logfile_game([0, 0])] {

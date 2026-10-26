@@ -15,6 +15,8 @@ pub enum ParserAppError {
     LogfileParseError(String),
     #[error("Could not find replay file")]
     ReplayNotFoundError,
+    #[error("Replay path is not valid UTF-8: {}", .0.display())]
+    NonUtf8ReplayPath(PathBuf),
     #[error("Replay and logfile describe different matches: {0}")]
     MatchMismatch(String),
     #[error("Could not transform replay to base64: {0}")]
