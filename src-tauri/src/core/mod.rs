@@ -222,6 +222,11 @@ fn process_replay(
 
     let mut replay_info = ExtendedGameInformation::from(&replay_file_info, &logfile_game_info);
 
+    // Keep the local backup even if the upload fails; a failed copy must not hide the match.
+    if let Err(e) = copy_replay_file(&replay_info, replay_file_path) {
+        tracing::error!("{e}");
+    }
+
     let replay_file_path = replay_file_path.to_path_buf();
     replay_info.send_replay_to_server(&replay_file_path)?;
 
@@ -242,7 +247,6 @@ fn process_replay(
     );
     set_text(handle, text);
 
-    copy_replay_file(&replay_info, &replay_file_path)?;
     notify_main_window(&replay_info, main_window_handle)?;
 
     Ok(())

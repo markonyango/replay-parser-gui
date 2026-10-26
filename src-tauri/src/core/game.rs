@@ -220,22 +220,21 @@ struct StatusResponse {
     error: Option<String>,
 }
 
-pub fn copy_replay_file<'a>(
-    game_information: &'a ExtendedGameInformation,
-    replay_file_path: &'a PathBuf,
-) -> ParserAppResult<()> {
-    let mut file_name = replay_file_path.clone();
+/// Copies the replay next to itself as `<match id>_<map>.rec` and returns the copy's path.
+pub fn copy_replay_file(
+    game_information: &ExtendedGameInformation,
+    replay_file_path: &Path,
+) -> ParserAppResult<PathBuf> {
     let map_name = game_information.map.path.replace("DATA:maps\\pvp\\", "");
+    let target =
+        replay_file_path.with_file_name(format!("{}_{}.rec", game_information.id, map_name));
 
-    file_name.set_file_name(format!("{}_{}.rec", game_information.id, map_name));
+    fs::copy(replay_file_path, &target).map_err(|source| ParserAppError::CopyReplayFile {
+        target: target.clone(),
+        source,
+    })?;
 
-    let Ok(_) = fs::copy(replay_file_path, file_name) else {
-        return Err(ParserAppError::ParserLibError(
-            "Could not copy replay file".into(),
-        ));
-    };
-
-    Ok(())
+    Ok(target)
 }
 
 pub fn notify_main_window<'a>(
@@ -416,6 +415,39 @@ mod tests {
             }),
             json!({ "kind": "failed", "reason": "timeout" })
         );
+    }
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("parser_game_{}_{}", std::process::id(), tag));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn copies_replay_under_match_id_and_map_name() {
+        let dir = temp_dir("copy_ok");
+        let replay = dir.join("temp.rec");
+        fs::write(&replay, b"replay bytes").unwrap();
+        let mut game = sample_game();
+        game.map.path = "DATA:maps\\pvp\\6p_calderis".into();
+
+        let copy = copy_replay_file(&game, &replay).unwrap();
+
+        assert_eq!(copy, dir.join("1234_6p_calderis.rec"));
+        assert_eq!(fs::read(copy).unwrap(), b"replay bytes");
+    }
+
+    #[test]
+    fn copy_error_keeps_the_io_cause() {
+        let dir = temp_dir("copy_missing");
+
+        let err = copy_replay_file(&sample_game(), &dir.join("temp.rec")).unwrap_err();
+
+        let ParserAppError::CopyReplayFile { source, .. } = err else {
+            panic!("unexpected error: {err:?}");
+        };
+        assert_eq!(source.kind(), std::io::ErrorKind::NotFound);
     }
 
     #[test]

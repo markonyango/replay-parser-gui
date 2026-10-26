@@ -1,4 +1,4 @@
-use std::{convert::Infallible, string::FromUtf8Error};
+use std::{convert::Infallible, path::PathBuf, string::FromUtf8Error};
 
 use color_eyre::Report;
 use serde::{Serialize, Serializer};
@@ -19,6 +19,12 @@ pub enum ParserAppError {
     MatchMismatch(String),
     #[error("Could not transform replay to base64: {0}")]
     TransformReplayToBase64(String),
+    #[error("Could not copy replay file to {}: {source}", .target.display())]
+    CopyReplayFile {
+        target: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("Generic error: {0}")]
     GenericError(String),
 }
