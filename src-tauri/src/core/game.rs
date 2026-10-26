@@ -156,7 +156,7 @@ impl From<ReplayGame> for GameInfo {
 
 impl ExtendedGameInformation {
     pub fn from(parsed_replay: &ReplayInfo, parsed_logfile_game: &LogfileGameInfo) -> Self {
-        let mut res = Self {
+        Self {
             aborted: parsed_logfile_game.aborted,
             id: parsed_logfile_game.id,
             map: match parsed_replay.map {
@@ -181,9 +181,7 @@ impl ExtendedGameInformation {
                 parser_lib::chunky::Chunk::Game(ref game) => GameInfo::from(game.clone()),
                 _ => GameInfo::default(),
             },
-        };
-
-        res
+        }
     }
 
     pub fn send_replay_to_server(&mut self, replay_file_path: &Path) -> ParserAppResult<()> {
@@ -537,8 +535,10 @@ mod tests {
 
     #[test]
     fn map_slug_strips_the_pvp_directory() {
-        let mut map = Map::default();
-        map.path = "DATA:maps\\pvp\\6p_calderis".into();
+        let mut map = Map {
+            path: "DATA:maps\\pvp\\6p_calderis".into(),
+            ..Default::default()
+        };
         assert_eq!(map_slug(&map), "6p_calderis");
 
         map.path = "custom".into();

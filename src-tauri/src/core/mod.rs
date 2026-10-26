@@ -211,7 +211,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
     let InputFiles {
         replay_file_path,
         logfile_path,
-    } = get_input_files(&handle)?;
+    } = get_input_files(handle)?;
 
     let game_data = load_game_data(handle);
 

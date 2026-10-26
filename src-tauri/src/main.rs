@@ -46,7 +46,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![status::get_status])
         .setup(|app| {
-            init_logging(&app);
+            init_logging(app);
             app.manage(status::StatusStore::default());
             let handle = app.handle().clone();
 

@@ -108,11 +108,7 @@ impl ReplayReportDto {
                     command_error: None,
                 })
                 .collect(),
-            dev: if let Some(dev) = replay.dev {
-                dev
-            } else {
-                false
-            },
+            dev: replay.dev.unwrap_or_default(),
             id: replay.id.to_string(),
             map: map_slug(&replay.map),
             reporter: ReplayReportReporterDto {

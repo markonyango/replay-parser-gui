@@ -193,11 +193,8 @@ impl LogfileGameList {
                     if let Some(last_game) = self.games.last_mut() {
                         // We can't know whether game block was created with capture index 0 or 1
                         // -> check if last game block is complete, i.e. Ending mission was read
-                        match last_game.block_complete() {
-                            true => {
-                                self.games.push(LogfileGameInfo::new());
-                            }
-                            false => (),
+                        if last_game.block_complete() {
+                            self.games.push(LogfileGameInfo::new());
                         }
                     } else {
                         self.games.push(LogfileGameInfo::new());

@@ -28,7 +28,7 @@ pub fn transform_player_information(
 
             match (logfile_player, _player) {
                 (Some(logfile_player), Some(player)) => {
-                    ExtendedPlayerInformation::from(logfile_player, &player)
+                    ExtendedPlayerInformation::from(logfile_player, player)
                 }
                 // No matching logfile entry (e.g. playback or unparsed log): keep what the replay knows.
                 (None, Some(player)) => ExtendedPlayerInformation::from_replay(player),

@@ -109,7 +109,7 @@ See **Release Builds And Signing** in [README.md](README.md) for signing instruc
 ## Backend Stack
 
 - **Tauri v2**: desktop app framework, IPC, plugins
-- **Rust 1.65+**: async/sync hybrid (std::thread for core loop)
+- **Rust 1.77.2+**: async/sync hybrid (std::thread for core loop)
 - **parser_lib**: external crate for replay parsing (git dependency from dowmechanicus/ReplayParser)
 - **notify** + **notify-debouncer-mini**: file watching with debounce
 - **reqwest**: HTTP client for uploads
