@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { emit } from '@tauri-apps/api/event';
 import { ReplayInfo } from 'src/types';
 
@@ -6,9 +7,13 @@ import { TauriService } from './tauri.service';
 
 describe('TauriService', () => {
   let service: TauriService;
+  let snackBar: jasmine.SpyObj<MatSnackBar>;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    snackBar = jasmine.createSpyObj('MatSnackBar', ['open']);
+    TestBed.configureTestingModule({
+      providers: [{ provide: MatSnackBar, useValue: snackBar }],
+    });
     service = TestBed.inject(TauriService);
   });
 
@@ -37,5 +42,17 @@ describe('TauriService', () => {
     expect(match.match_id).toBe(42);
     expect(match.duration).toBe('01:05');
     expect(match.actions.length).toBe(1);
+  });
+
+  it('opens a snackbar when deleting a match fails', async () => {
+    const failingStore = { set: () => Promise.reject(new Error('disk full')) };
+    (service as any).json_store.set(failingStore);
+    snackBar.open.calls.reset();
+    spyOn(console, 'error');
+
+    service.delete_match(1);
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(snackBar.open).toHaveBeenCalledWith('Could not delete the match.', 'Dismiss');
   });
 });

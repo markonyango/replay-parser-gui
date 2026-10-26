@@ -1,4 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { MatSnackBar } from '@angular/material/snack-bar';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { load, Store } from '@tauri-apps/plugin-store';
@@ -13,6 +14,7 @@ const appWindow = getCurrentWebviewWindow();
 })
 export class TauriService {
     private status = inject(StatusService);
+    private snackBar = inject(MatSnackBar);
 
     private matches_state = signal<MatchItem[]>([]);
 
@@ -34,7 +36,7 @@ export class TauriService {
                 this.storeReady.then(() => this.addMatch(event.payload));
             })
             .catch((error) =>
-                console.error('Could not listen for new games', error)
+                this.notifyError('Could not listen for new games.', error)
             );
 
         appWindow
@@ -45,6 +47,11 @@ export class TauriService {
             .then(() => invoke<StatusSnapshot>('get_status'))
             .then((snapshot) => this.status.apply(snapshot))
             .catch((error) => console.error('Could not load status', error));
+    }
+
+    private notifyError(message: string, error: unknown) {
+        console.error(message, error);
+        this.snackBar.open(message, 'Dismiss');
     }
 
     private async loadStore() {
@@ -66,7 +73,7 @@ export class TauriService {
                 }
             }
         } catch (error) {
-            console.error('Could not load stored matches', error);
+            this.notifyError('Could not load stored matches.', error);
         }
     }
 
@@ -88,7 +95,10 @@ export class TauriService {
         try {
             await this.json_store()?.set('matches', matches);
         } catch (error) {
-            console.error('Could not persist match', error);
+            this.notifyError(
+                'Could not save the match. It will not survive a restart.',
+                error
+            );
         }
     }
 
@@ -104,7 +114,9 @@ export class TauriService {
                 this.matches_state.set(filteredMatches);
                 this.knownMatchIDs.delete(id);
             })
-            .catch((error) => console.error('Could not delete match', error));
+            .catch((error) =>
+                this.notifyError('Could not delete the match.', error)
+            );
     }
 }
 
