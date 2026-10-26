@@ -186,18 +186,11 @@ impl ExtendedGameInformation {
         res
     }
 
-    pub fn send_replay_to_server(
-        &mut self,
-        replay_file_path: &PathBuf,
-    ) -> ParserAppResult<&mut Self> {
+    pub fn send_replay_to_server(&mut self, replay_file_path: &Path) -> ParserAppResult<()> {
         self.send_replay_to(REPORT_URL, replay_file_path)
     }
 
-    fn send_replay_to(
-        &mut self,
-        url: &str,
-        replay_file_path: &PathBuf,
-    ) -> ParserAppResult<&mut Self> {
+    fn send_replay_to(&mut self, url: &str, replay_file_path: &Path) -> ParserAppResult<()> {
         // Without a readable replay there is nothing to report, so this stays a hard error.
         self.transform_replay_to_base64(replay_file_path)?;
 
@@ -220,7 +213,7 @@ impl ExtendedGameInformation {
         // Never hand the base64 payload on to the frontend, whatever the outcome.
         self.replay = None;
 
-        Ok(self)
+        Ok(())
     }
 
     fn upload(
@@ -249,9 +242,9 @@ impl ExtendedGameInformation {
         }
     }
 
-    fn transform_replay_to_base64(&mut self, replay_file_path: &PathBuf) -> ParserAppResult<()> {
+    fn transform_replay_to_base64(&mut self, replay_file_path: &Path) -> ParserAppResult<()> {
         let bytes = fs::read(replay_file_path).map_err(|source| ParserAppError::ReplayRead {
-            path: replay_file_path.clone(),
+            path: replay_file_path.to_path_buf(),
             source,
         })?;
 
@@ -313,9 +306,9 @@ pub fn copy_replay_file(
     Ok(target)
 }
 
-pub fn notify_main_window<'a>(
-    game_information: &'a ExtendedGameInformation,
-    main_window_handle: &'a WebviewWindow,
+pub fn notify_main_window(
+    game_information: &ExtendedGameInformation,
+    main_window_handle: &WebviewWindow,
 ) -> Result<(), tauri::Error> {
     tracing::debug!("Sending new game to main window");
     main_window_handle.emit("new-game", game_information)
@@ -390,7 +383,7 @@ mod tests {
         let (url, request) = serve_once(r#"{"response":"ok"}"#);
         let mut game = sample_game();
 
-        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+        game.send_replay_to(&url, Path::new(FIXTURE_REPLAY))
             .unwrap();
 
         let request = request.recv().unwrap();
@@ -423,7 +416,7 @@ mod tests {
 
         game.send_replay_to(
             &format!("http://127.0.0.1:{port}/esl-report.php"),
-            &PathBuf::from(FIXTURE_REPLAY),
+            Path::new(FIXTURE_REPLAY),
         )
         .unwrap();
 
@@ -439,7 +432,7 @@ mod tests {
         let (url, _request) = serve_once("<html>502 Bad Gateway</html>");
         let mut game = sample_game();
 
-        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+        game.send_replay_to(&url, Path::new(FIXTURE_REPLAY))
             .unwrap();
 
         assert!(
@@ -455,7 +448,7 @@ mod tests {
         let (url, _request) = serve_once(r#"{"error":"bad replay"}"#);
         let mut game = sample_game();
 
-        game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
+        game.send_replay_to(&url, Path::new(FIXTURE_REPLAY))
             .unwrap();
 
         assert_eq!(
@@ -595,7 +588,7 @@ mod tests {
 
         let res = game.send_replay_to(
             "http://127.0.0.1:9/esl-report.php",
-            &PathBuf::from("does-not-exist.rec"),
+            Path::new("does-not-exist.rec"),
         );
 
         assert!(res.is_err());

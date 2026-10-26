@@ -280,8 +280,7 @@ fn process_replay(
         tracing::error!("{e}");
     }
 
-    let replay_file_path = replay_file_path.to_path_buf();
-    replay_info.send_replay_to_server(&replay_file_path)?;
+    replay_info.send_replay_to_server(replay_file_path)?;
 
     let (state, text) = if replay_info.status.is_accepted() {
         (
