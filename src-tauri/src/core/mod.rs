@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     time::Duration,
 };
@@ -48,6 +49,49 @@ pub fn parse_logfile(logfile_path: &Path) -> error::ParserAppResult<LogfileGameI
 fn parse_replay_file(replay_file_path: String) -> ParserAppResult<ReplayInfo> {
     let parsed_replay = parser_lib::parse_raw(replay_file_path)?;
     Ok(parsed_replay)
+}
+
+/// Checks that the logfile game belongs to the replay, so a replay is never uploaded
+/// with the ID and results of another match.
+///
+/// Every player the logfile identifies must be in the replay. The replay may hold
+/// more players: AI and dropped players can have no relic id in the logfile (0).
+fn ensure_same_match(replay: &ReplayInfo, logfile_game: &LogfileGameInfo) -> ParserAppResult<()> {
+    let replay_relic_ids = replay
+        .players
+        .iter()
+        .filter_map(|chunk| match chunk {
+            parser_lib::chunky::Chunk::Player(player) => Some(player.relic_id),
+            _ => None,
+        })
+        .collect::<HashSet<_>>();
+
+    let logfile_relic_ids = logfile_game
+        .players
+        .iter()
+        .map(|player| player.relic_id as u64)
+        .filter(|relic_id| *relic_id != 0)
+        .collect::<HashSet<_>>();
+
+    if logfile_relic_ids.is_empty() {
+        return Err(ParserAppError::MatchMismatch(format!(
+            "logfile game {} has no identified players",
+            logfile_game.id
+        )));
+    }
+
+    let mut missing = logfile_relic_ids
+        .difference(&replay_relic_ids)
+        .collect::<Vec<_>>();
+    if !missing.is_empty() {
+        missing.sort();
+        return Err(ParserAppError::MatchMismatch(format!(
+            "players {missing:?} of logfile game {} are not in the replay",
+            logfile_game.id
+        )));
+    }
+
+    Ok(())
 }
 
 pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
@@ -174,6 +218,8 @@ fn process_replay(
         .run(&mut replay_file_info)
         .map_err(|e| ParserAppError::ParserLibError(format!("{e:?}")))?;
 
+    ensure_same_match(&replay_file_info, &logfile_game_info)?;
+
     let mut replay_info = ExtendedGameInformation::from(&replay_file_info, &logfile_game_info);
 
     let replay_file_path = replay_file_path.to_path_buf();
@@ -200,4 +246,81 @@ fn process_replay(
     notify_main_window(&replay_info, main_window_handle)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use parser_lib::chunky::Chunk;
+
+    use super::*;
+    use crate::core::player_info::LogfilePlayerInfo;
+
+    const FIXTURE_REPLAY: &str = "3v3.rec";
+
+    fn replay_relic_ids(replay: &ReplayInfo) -> Vec<usize> {
+        replay
+            .players
+            .iter()
+            .filter_map(|chunk| match chunk {
+                Chunk::Player(player) => Some(player.relic_id as usize),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn logfile_game(relic_ids: impl IntoIterator<Item = usize>) -> LogfileGameInfo {
+        LogfileGameInfo {
+            players: relic_ids
+                .into_iter()
+                .map(|relic_id| LogfilePlayerInfo {
+                    relic_id,
+                    ..Default::default()
+                })
+                .collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn accepts_logfile_game_with_the_replays_players() {
+        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let mut relic_ids = replay_relic_ids(&replay);
+        relic_ids.reverse();
+        // AI and unresolved dropped players carry relic id 0 and are ignored.
+        relic_ids.push(0);
+
+        assert!(ensure_same_match(&replay, &logfile_game(relic_ids)).is_ok());
+    }
+
+    #[test]
+    fn accepts_replay_with_players_the_logfile_could_not_resolve() {
+        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let relic_ids = replay_relic_ids(&replay);
+
+        let logfile = logfile_game(relic_ids.into_iter().skip(1));
+
+        assert!(ensure_same_match(&replay, &logfile).is_ok());
+    }
+
+    #[test]
+    fn rejects_logfile_game_with_a_player_not_in_the_replay() {
+        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+        let mut relic_ids = replay_relic_ids(&replay);
+        relic_ids[0] = 1;
+
+        let result = ensure_same_match(&replay, &logfile_game(relic_ids));
+
+        assert!(matches!(result, Err(ParserAppError::MatchMismatch(_))));
+    }
+
+    #[test]
+    fn rejects_logfile_game_without_known_players() {
+        let replay = parse_replay_file(FIXTURE_REPLAY.into()).unwrap();
+
+        // E.g. the newest game block before its results were written.
+        for logfile in [logfile_game([]), logfile_game([0, 0])] {
+            let result = ensure_same_match(&replay, &logfile);
+            assert!(matches!(result, Err(ParserAppError::MatchMismatch(_))));
+        }
+    }
 }
