@@ -48,6 +48,8 @@ export type MapInfo = {
   abbrname: string;
   maxplayers: number;
   path: string;
+  /** Short map name from the backend; absent on matches stored before it was added. */
+  slug?: string;
   date: string;
   width: number;
   height: number;

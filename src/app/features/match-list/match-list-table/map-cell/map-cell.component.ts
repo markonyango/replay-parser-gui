@@ -1,6 +1,7 @@
 import { Component, computed, signal } from '@angular/core';
 import { ICellRendererAngularComp } from 'ag-grid-angular';
 import { ICellRendererParams } from 'ag-grid-community';
+import { mapSlug } from 'src/app/core/map-slug';
 import { MapInfo } from 'src/types';
 
 @Component({
@@ -19,5 +20,5 @@ export class MapCellComponent implements ICellRendererAngularComp {
 
   map = signal<MapInfo | undefined>(undefined);
 
-  mapname = computed(() => this.map()?.path.replace('DATA:maps\\pvp\\', ''));
+  mapname = computed(() => mapSlug(this.map()));
 }

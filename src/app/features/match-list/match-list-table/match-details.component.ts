@@ -4,6 +4,7 @@ import { MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import { AgGridAngular } from 'ag-grid-angular';
 import { ColDef, GridApi, GridReadyEvent } from 'ag-grid-community';
+import { mapSlug } from 'src/app/core/map-slug';
 import { ticks2time } from 'src/app/core/services/tauri.service';
 import { gridTheme } from './grid-theme';
 import { ActionInfo, MatchItem, MessageInfo, PlayerInfo } from 'src/types';
@@ -183,7 +184,7 @@ export class MatchDetailsComponent {
     protected messages = this.data.messages ?? [];
     protected actions = (this.data.actions ?? []) as ActionRow[];
 
-    protected mapName = this.data.map.path.replace('DATA:maps\\pvp\\', '') || this.data.map.name;
+    protected mapName = mapSlug(this.data.map) || this.data.map.name;
 
     protected teams = this.buildTeams(this.data.players);
     private teamByName = new Map(

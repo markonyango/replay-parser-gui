@@ -3,7 +3,7 @@ use parser_lib::{actions::Action, message::Message};
 use serde::Serialize;
 
 use super::{
-    game::ExtendedGameInformation,
+    game::{map_slug, ExtendedGameInformation},
     player_info::{ExtendedPlayerInformation, LogfilePlayerStatus},
 };
 
@@ -114,7 +114,7 @@ impl ReplayReportDto {
                 false
             },
             id: replay.id.to_string(),
-            map: replay.map.path.clone().replace("DATA:maps\\pvp\\", ""),
+            map: map_slug(&replay.map),
             reporter: ReplayReportReporterDto {
                 date: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
                 version: "1.0.7".into(),

@@ -35,6 +35,7 @@ use super::{
     replay_reporter_dto::ReplayReportDto,
 };
 
+const MAP_PATH_PREFIX: &str = "DATA:maps\\pvp\\";
 const REPORT_URL: &str = "https://dow2elite.com/esl-report.php";
 const UPLOAD_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -48,6 +49,7 @@ pub struct ExtendedGameInformation {
     pub date: String,
     pub ticks: usize,
     pub game: GameInfo,
+    #[serde(serialize_with = "serialize_map_for_frontend")]
     pub map: Map,
     pub players: Vec<ExtendedPlayerInformation>,
     pub messages: Vec<Message>,
@@ -124,6 +126,20 @@ fn serialize_actions_for_frontend<S: Serializer>(
     serializer: S,
 ) -> Result<S::Ok, S::Error> {
     serializer.collect_seq(actions.iter().map(ActionView::from))
+}
+
+/// The map's short name, e.g. `6p_calderis` for `DATA:maps\\pvp\\6p_calderis`.
+pub fn map_slug(map: &Map) -> String {
+    map.path.replace(MAP_PATH_PREFIX, "")
+}
+
+/// Serializes the map as parsed, plus its `slug`, so the frontend need not derive it.
+fn serialize_map_for_frontend<S: Serializer>(map: &Map, serializer: S) -> Result<S::Ok, S::Error> {
+    let mut value = serde_json::to_value(map).map_err(serde::ser::Error::custom)?;
+    if let Some(fields) = value.as_object_mut() {
+        fields.insert("slug".into(), map_slug(map).into());
+    }
+    value.serialize(serializer)
 }
 
 impl From<ReplayGame> for GameInfo {
@@ -285,7 +301,7 @@ pub fn copy_replay_file(
     game_information: &ExtendedGameInformation,
     replay_file_path: &Path,
 ) -> ParserAppResult<PathBuf> {
-    let map_name = game_information.map.path.replace("DATA:maps\\pvp\\", "");
+    let map_name = map_slug(&game_information.map);
     let target =
         replay_file_path.with_file_name(format!("{}_{}.rec", game_information.id, map_name));
 
@@ -524,6 +540,27 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn map_slug_strips_the_pvp_directory() {
+        let mut map = Map::default();
+        map.path = "DATA:maps\\pvp\\6p_calderis".into();
+        assert_eq!(map_slug(&map), "6p_calderis");
+
+        map.path = "custom".into();
+        assert_eq!(map_slug(&map), "custom");
+    }
+
+    #[test]
+    fn serialized_map_carries_its_slug() {
+        let mut game = sample_game();
+        game.map.path = "DATA:maps\\pvp\\6p_calderis".into();
+
+        let json = serde_json::to_value(&game).unwrap();
+
+        assert_eq!(json["map"]["slug"], "6p_calderis");
+        assert_eq!(json["map"]["path"], "DATA:maps\\pvp\\6p_calderis");
     }
 
     #[test]
