@@ -9,6 +9,8 @@ extern crate lazy_static;
 mod core;
 mod logger;
 
+use std::collections::HashMap;
+
 use tauri::Manager;
 
 use crate::{
@@ -16,11 +18,22 @@ use crate::{
     logger::init_logging,
 };
 
+/// store.json holds every match; pretty-printing it makes the file roughly 60% bigger.
+fn compact_json(
+    cache: &HashMap<String, serde_json::Value>,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    Ok(serde_json::to_vec(cache)?)
+}
+
 fn main() {
     color_eyre::install().unwrap();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(
+            tauri_plugin_store::Builder::new()
+                .default_serialize_fn(compact_json)
+                .build(),
+        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
