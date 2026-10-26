@@ -7,12 +7,13 @@ use notify::RecursiveMode;
 use notify_debouncer_mini::new_debouncer;
 use parser_lib::{replay::ReplayInfo, Chain, GameData};
 use tauri::{AppHandle, Manager};
+use tracing::debug;
 
 use self::{
-    status::{set_indicator, set_text, IndicatorState},
     error::{ParserAppError, ParserAppResult},
     game::{copy_replay_file, notify_main_window, ExtendedGameInformation},
     logfile::{LogfileGameInfo, LogfileGameList},
+    status::{set_indicator, set_text, IndicatorState},
 };
 
 mod discover;
@@ -62,10 +63,24 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     let playback_found = playback_path.parent().is_some_and(Path::is_dir);
 
     for (id, label, found, path) in [
-        ("replay", "Replay folder", playback_found, playback_path.parent()),
-        ("logfile", "Logfile", logfile_found, Some(logfile_path.as_path())),
+        (
+            "replay",
+            "Replay folder",
+            playback_found,
+            playback_path.parent(),
+        ),
+        (
+            "logfile",
+            "Logfile",
+            logfile_found,
+            Some(logfile_path.as_path()),
+        ),
     ] {
-        let state = if found { IndicatorState::Ok } else { IndicatorState::Error };
+        let state = if found {
+            IndicatorState::Ok
+        } else {
+            IndicatorState::Error
+        };
         let tooltip = path.map(|p| p.display().to_string());
         set_indicator(handle, id, label, state, tooltip);
     }
@@ -149,7 +164,10 @@ fn process_replay(
     main_window_handle: &tauri::WebviewWindow,
     handle: &AppHandle,
 ) -> ParserAppResult<()> {
+    debug!("Parsing logfile: {:?}", logfile_path);
     let logfile_game_info = parse_logfile(logfile_path)?;
+
+    debug!("Parsing replay file: {:?}", replay_file_path);
     let mut replay_file_info = parse_replay_file(replay_file_path.to_str().unwrap().to_string())?;
 
     Chain::with_defaults(steam_game_location)
@@ -161,23 +179,22 @@ fn process_replay(
     let replay_file_path = replay_file_path.to_path_buf();
     replay_info.send_replay_to_server(&replay_file_path)?;
 
-    // Mirrors the heuristic used when the server responds: any "error" in the status is a failure.
-    let upload_failed = replay_info.status.contains("error");
+    let (state, text) = if replay_info.status.is_accepted() {
+        (IndicatorState::Ok, format!("Uploaded match {}", replay_info.id))
+    } else {
+        (
+            IndicatorState::Error,
+            format!("Upload of match {} failed", replay_info.id),
+        )
+    };
     set_indicator(
         handle,
         "upload",
         "Upload",
-        if upload_failed { IndicatorState::Error } else { IndicatorState::Ok },
-        Some(replay_info.status.clone()),
+        state,
+        replay_info.status.detail().map(str::to_owned),
     );
-    set_text(
-        handle,
-        if upload_failed {
-            format!("Upload of match {} failed", replay_info.id)
-        } else {
-            format!("Uploaded match {}", replay_info.id)
-        },
-    );
+    set_text(handle, text);
 
     copy_replay_file(&replay_info, &replay_file_path)?;
     notify_main_window(&replay_info, main_window_handle)?;

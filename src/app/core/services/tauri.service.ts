@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { load, Store } from '@tauri-apps/plugin-store';
 import { MatchItem, ReplayInfo } from 'src/types';
+import { migrateStoredMatch, StoredMatch } from '../upload-status';
 import { StatusService, StatusSnapshot } from './status.service';
 
 const appWindow = getCurrentWebviewWindow();
@@ -54,10 +55,11 @@ export class TauriService {
         load('store.json').then((store) => {
             this.json_store.set(store);
             this.json_store()
-                ?.get<MatchItem[]>('matches')
-                .then((matches) => {
-                    if (matches) {
-                        this.matches_state.set(matches ?? []);
+                ?.get<StoredMatch[]>('matches')
+                .then((stored) => {
+                    if (stored) {
+                        const matches = stored.map(migrateStoredMatch);
+                        this.matches_state.set(matches);
                         matches.forEach((match) =>
                             this.knownMatchIDs.add(match.match_id)
                         );
@@ -82,19 +84,12 @@ export class TauriService {
 }
 
 function mapJsonToVM(json: ReplayInfo): MatchItem {
-    let status;
-    try {
-        status = JSON.parse(json.status);
-    } catch (error) {
-        status = { error: json.status };
-    }
-
     return {
         match_id: json.id,
         players: json.players,
         map: json.map,
         duration: ticks2time(json.ticks),
-        status,
+        status: json.status,
         played_at: json.date,
         messages: json.messages,
         actions: json.actions,

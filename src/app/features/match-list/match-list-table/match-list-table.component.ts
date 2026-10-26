@@ -4,6 +4,7 @@ import { AgGridAngular } from 'ag-grid-angular';
 import { AllCommunityModule, ClientSideRowModelModule, GridApi, GridOptions, ModuleRegistry } from 'ag-grid-community';
 
 import { MatchItem } from 'src/types';
+import { uploadStatusText } from 'src/app/core/upload-status';
 import { MapCellComponent } from './map-cell/map-cell.component';
 import { PlayersCellComponent } from './players-cell/players-cell.component';
 import { DetailsRendererComponent } from './details.renderer';
@@ -44,7 +45,7 @@ export class MatchListTableComponent {
       { flex: 3, field: 'players', cellRenderer: PlayersCellComponent },
       { flex: 2, field: 'map', cellRenderer: MapCellComponent },
       { flex: 1, field: 'duration' },
-      { flex: 1, field: 'status', headerName: 'Uploaded', valueGetter: params => params.data?.status['response'] ?? params.data?.status['error'] },
+      { flex: 1, field: 'status', headerName: 'Uploaded', valueGetter: params => params.data && uploadStatusText(params.data.status) },
       { flex: 1, field: 'played_at', headerName: 'Played at' },
       {
         flex: 1, cellRenderer: ActionsCellRendererComponent, cellRendererParams: {

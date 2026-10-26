@@ -54,7 +54,7 @@ pub struct ExtendedGameInformation {
     pub aborted: bool,
     pub frames: usize,
     pub ended_at: String,
-    pub status: String,
+    pub status: UploadStatus,
     pub dev: Option<bool>,
     pub replay: Option<String>,
 }
@@ -100,7 +100,7 @@ impl ExtendedGameInformation {
             md5: parsed_replay.md5.clone(),
             date: parsed_replay.date.clone(),
             ticks: parsed_replay.ticks as usize,
-            status: "".into(),
+            status: UploadStatus::Pending,
             dev: None,
             replay: None,
             game: match parsed_replay.game {
@@ -134,11 +134,12 @@ impl ExtendedGameInformation {
             .and_then(|client| self.upload(&client, url));
 
         self.status = match outcome {
-            Ok(UploadOutcome::Accepted(message)) => message,
-            Ok(UploadOutcome::Rejected(message)) => message,
+            Ok(status) => status,
             Err(err) => {
                 error!("Replay upload failed: {:?}", err);
-                json!({ "error": err.to_string() }).to_string()
+                UploadStatus::Failed {
+                    reason: err.to_string(),
+                }
             }
         };
 
@@ -152,7 +153,7 @@ impl ExtendedGameInformation {
         &self,
         client: &reqwest::blocking::Client,
         url: &str,
-    ) -> Result<UploadOutcome, UploadError> {
+    ) -> Result<UploadStatus, UploadError> {
         let response = client.post(url).json(&ReplayReportDto::from(self)).send()?;
         let http_status = response.status();
 
@@ -163,8 +164,10 @@ impl ExtendedGameInformation {
         debug!("The response message from the server: {:?}", body);
 
         match (body.response, body.error) {
-            (Some(message), _) if http_status.is_success() => Ok(UploadOutcome::Accepted(message)),
-            (_, Some(message)) => Ok(UploadOutcome::Rejected(message)),
+            (Some(message), _) if http_status.is_success() => {
+                Ok(UploadStatus::Accepted { message })
+            }
+            (_, Some(message)) => Ok(UploadStatus::Rejected { message }),
             _ => Err(UploadError::BadResponse(
                 http_status,
                 "response carried neither a message nor an error".into(),
@@ -182,9 +185,33 @@ impl ExtendedGameInformation {
     }
 }
 
-enum UploadOutcome {
-    Accepted(String),
-    Rejected(String),
+/// Outcome of reporting a replay, sent to the frontend as `{"kind": …, …}`.
+#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum UploadStatus {
+    #[default]
+    Pending,
+    /// The server accepted the replay.
+    Accepted { message: String },
+    /// The server answered but refused the replay.
+    Rejected { message: String },
+    /// The server could not be reached or gave an unusable answer.
+    Failed { reason: String },
+}
+
+impl UploadStatus {
+    pub fn is_accepted(&self) -> bool {
+        matches!(self, Self::Accepted { .. })
+    }
+
+    /// Human-readable detail: the server's message or the failure reason.
+    pub fn detail(&self) -> Option<&str> {
+        match self {
+            Self::Pending => None,
+            Self::Accepted { message } | Self::Rejected { message } => Some(message),
+            Self::Failed { reason } => Some(reason),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -302,7 +329,12 @@ mod tests {
             "request did not carry the base64 replay"
         );
 
-        assert_eq!(game.status, "ok");
+        assert_eq!(
+            game.status,
+            UploadStatus::Accepted {
+                message: "ok".into()
+            }
+        );
     }
 
     #[test]
@@ -321,7 +353,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(game.status.contains("error"), "{}", game.status);
+        assert!(
+            matches!(game.status, UploadStatus::Failed { .. }),
+            "{:?}",
+            game.status
+        );
     }
 
     #[test]
@@ -332,7 +368,11 @@ mod tests {
         game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
             .unwrap();
 
-        assert!(game.status.contains("error"), "{}", game.status);
+        assert!(
+            matches!(game.status, UploadStatus::Failed { .. }),
+            "{:?}",
+            game.status
+        );
         assert!(game.replay.is_none());
     }
 
@@ -344,8 +384,38 @@ mod tests {
         game.send_replay_to(&url, &PathBuf::from(FIXTURE_REPLAY))
             .unwrap();
 
-        assert_eq!(game.status, "bad replay");
+        assert_eq!(
+            game.status,
+            UploadStatus::Rejected {
+                message: "bad replay".into()
+            }
+        );
         assert!(game.replay.is_none());
+    }
+
+    #[test]
+    fn serializes_status_with_kind_tag() {
+        let status = |s: UploadStatus| serde_json::to_value(s).unwrap();
+
+        assert_eq!(status(UploadStatus::Pending), json!({ "kind": "pending" }));
+        assert_eq!(
+            status(UploadStatus::Accepted {
+                message: "ok".into()
+            }),
+            json!({ "kind": "accepted", "message": "ok" })
+        );
+        assert_eq!(
+            status(UploadStatus::Rejected {
+                message: "bad replay".into()
+            }),
+            json!({ "kind": "rejected", "message": "bad replay" })
+        );
+        assert_eq!(
+            status(UploadStatus::Failed {
+                reason: "timeout".into()
+            }),
+            json!({ "kind": "failed", "reason": "timeout" })
+        );
     }
 
     #[test]

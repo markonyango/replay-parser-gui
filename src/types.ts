@@ -9,19 +9,26 @@ export type ReplayInfo = {
   game: GameInfo;
   map: MapInfo;
   aborted: boolean;
-  status: string;
+  status: UploadStatus;
   players: Array<PlayerInfo>;
   messages: Array<MessageInfo>;
   actions: Array<ActionInfo>;
   observers?: Array<ObserverInfo>;
 };
 
+/** Outcome of reporting a match to the server, as serialized by the backend. */
+export type UploadStatus =
+  | { kind: 'accepted'; message: string }
+  | { kind: 'rejected'; message: string }
+  | { kind: 'failed'; reason: string }
+  | { kind: 'pending' };
+
 export interface MatchItem {
   match_id: number,
   players: PlayerInfo[],
   map: MapInfo,
   duration: string,
-  status: Record<string, string>,
+  status: UploadStatus,
   played_at: string,
   messages: MessageInfo[],
   actions: ActionInfo[]

@@ -15,7 +15,7 @@ function matchItem(overrides: Partial<MatchItem> = {}): MatchItem {
     players: [player('Alice', 0, 'Won'), player('Bob', 1, 'Killed')],
     map: { name: 'Quralon', path: 'DATA:maps\\pvp\\2p_quralon' } as MatchItem['map'],
     duration: '12:34',
-    status: {},
+    status: { kind: 'pending' },
     played_at: '2026-01-01',
     messages: [
       { tick: 100, sender: 'Alice', receiver: 'All', body: 'gl hf', player_id: 0 },
