@@ -147,6 +147,59 @@ pub fn get_input_files(handle: &AppHandle) -> ParserAppResult<InputFiles> {
     })
 }
 
+/// Opens the game data used to resolve display names. Without it replays are still
+/// parsed and uploaded, only without display names, so failures are reported, not fatal.
+fn load_game_data(handle: &AppHandle) -> Option<GameData> {
+    let result = discover::locate_elite_module()
+        .map_err(GameDataProblem::NotFound)
+        .and_then(|module| {
+            GameData::open(&module)
+                .map(|data| (module.clone(), data))
+                .map_err(|reason| GameDataProblem::Unreadable { module, reason })
+        });
+
+    let (state, tooltip, game_data) = match result {
+        Ok((module, data)) => {
+            tracing::info!("Resolving display names from {}", module.display());
+            (IndicatorState::Ok, module.display().to_string(), Some(data))
+        }
+        Err(problem) => {
+            tracing::warn!("Display names unavailable, uploading without them: {problem}");
+            (
+                IndicatorState::Warning,
+                problem.user_message().to_owned(),
+                None,
+            )
+        }
+    };
+    set_indicator(handle, "module", "Game files", state, Some(tooltip));
+
+    game_data
+}
+
+/// Why display names cannot be resolved. `Display` is the technical reason for the log;
+/// [`GameDataProblem::user_message`] is what players see.
+#[derive(Debug, thiserror::Error)]
+enum GameDataProblem {
+    #[error("{0}")]
+    NotFound(discover::DiscoverError),
+    #[error("could not open {}: {reason}", .module.display())]
+    Unreadable { module: PathBuf, reason: String },
+}
+
+impl GameDataProblem {
+    fn user_message(&self) -> &'static str {
+        match self {
+            GameDataProblem::NotFound(_) => {
+                "Game files not found. Matches are still uploaded, but without unit and item names."
+            }
+            GameDataProblem::Unreadable { .. } => {
+                "Game files could not be read. Matches are still uploaded, but without unit and item names."
+            }
+        }
+    }
+}
+
 pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
     let Some(main_window_handle) = handle.get_webview_window("main") else {
         return Err(ParserAppError::GenericError(
@@ -160,12 +213,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         logfile_path,
     } = get_input_files(&handle)?;
 
-    // Find Steam installation location
-    let loc = discover::locate_elite_module()
-        .ok()
-        .map(|m| GameData::open(&m))
-        .transpose()
-        .map_err(|_e| ParserAppError::GenericError("Steam location not found".to_string()))?;
+    let game_data = load_game_data(handle);
 
     let mut debouncer = new_debouncer(Duration::from_secs(5), None, tx)?;
 
@@ -193,7 +241,7 @@ pub fn handle_new_game_event(handle: &AppHandle) -> ParserAppResult<()> {
         if let Err(e) = process_replay(
             &replay_file_path,
             &logfile_path,
-            loc.as_ref(),
+            game_data.as_ref(),
             &main_window_handle,
             handle,
         ) {
@@ -235,7 +283,10 @@ fn process_replay(
     replay_info.send_replay_to_server(&replay_file_path)?;
 
     let (state, text) = if replay_info.status.is_accepted() {
-        (IndicatorState::Ok, format!("Uploaded match {}", replay_info.id))
+        (
+            IndicatorState::Ok,
+            format!("Uploaded match {}", replay_info.id),
+        )
     } else {
         (
             IndicatorState::Error,
@@ -286,6 +337,26 @@ mod tests {
                 })
                 .collect(),
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn game_data_problems_keep_details_out_of_the_user_message() {
+        let problems = [
+            GameDataProblem::NotFound(discover::DiscoverError::NotFound {
+                searched: vec![PathBuf::from("/libs")],
+            }),
+            GameDataProblem::Unreadable {
+                module: PathBuf::from("/game/Elite.module"),
+                reason: "bad archive".into(),
+            },
+        ];
+
+        for problem in problems {
+            let message = problem.user_message();
+            assert!(message.starts_with("Game files"), "{message}");
+            assert!(!message.contains("Elite.module"), "{message}");
+            assert!(problem.to_string().contains('/'), "{problem}");
         }
     }
 

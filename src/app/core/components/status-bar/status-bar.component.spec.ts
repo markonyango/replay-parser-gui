@@ -37,6 +37,20 @@ describe('StatusBarComponent', () => {
         expect(items[1].querySelector('[data-testid="marker-error"]')).toBeTruthy();
     });
 
+    it('renders a warning indicator with its own marker and screen-reader text', () => {
+        fixture.componentRef.setInput('indicators', [
+            { id: 'module', label: 'Game files', state: 'warning', tooltip: 'Game files not found.' },
+        ]);
+        fixture.detectChanges();
+
+        const item = el.querySelector('li')!;
+        expect(item.getAttribute('data-state')).toBe('warning');
+        expect(item.getAttribute('title')).toBe('Game files not found.');
+        const marker = item.querySelector<HTMLElement>('[data-testid="marker-warning"]')!;
+        expect(marker.style.backgroundColor).toBe('var(--c-warn)');
+        expect(item.querySelector('.sr-only')?.textContent?.trim()).toBe('Warning');
+    });
+
     it('renders no indicators when none are given', () => {
         fixture.detectChanges();
         expect(el.querySelectorAll('li').length).toBe(0);

@@ -16,13 +16,11 @@
                     aria-hidden="true"
                     [attr.data-testid]="'marker-' + indicator.state"
                     class="inline-block h-2.5 w-2.5 rotate-45 border"
-                    [style.background-color]="indicator.state === 'ok' ? 'var(--c-ok)' : 'var(--c-blood-bright)'"
-                    [style.border-color]="indicator.state === 'ok' ? 'var(--c-parchment)' : 'var(--c-gold-bright)'"
+                    [style.background-color]="styles[indicator.state].fill"
+                    [style.border-color]="styles[indicator.state].border"
                 ></span>
                 <span>{{ indicator.label }}</span>
-                <span class="sr-only">{{
-                    indicator.state === 'ok' ? 'OK' : 'Error'
-                }}</span>
+                <span class="sr-only">{{ styles[indicator.state].label }}</span>
             </li>
         }
     </ul>

@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 
-export type IndicatorState = 'ok' | 'error';
+export type IndicatorState = 'ok' | 'warning' | 'error';
 
 export interface StatusIndicator {
     id: string;

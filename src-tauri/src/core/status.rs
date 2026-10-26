@@ -9,6 +9,8 @@ pub const STATUS_EVENT: &str = "status-changed";
 #[serde(rename_all = "lowercase")]
 pub enum IndicatorState {
     Ok,
+    /// Working, but with reduced functionality.
+    Warning,
     Error,
 }
 

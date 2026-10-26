@@ -1,4 +1,4 @@
-//! Locating the game's `Elite.module` without `--module`, through Steam.
+//! Locating the game's `Elite.module` through Steam, for display-name resolution.
 //!
 //! Candidates are tried in preference order:
 //!
@@ -35,25 +35,38 @@ struct Candidate {
     module: PathBuf,
 }
 
-/// Finds a module file for display-name resolution. Returns a user-facing message when
-/// nothing is found; the caller decides how to proceed (warn, parse without names).
-pub fn locate_elite_module() -> Result<PathBuf, String> {
+/// Why no `Elite.module` was found. The caller decides how to proceed (parse without names).
+#[derive(Debug, thiserror::Error)]
+pub enum DiscoverError {
+    #[error("Steam was not found ({0}); set {ENV_INSTALL} to the game folder")]
+    SteamNotFound(#[source] steamlocate::Error),
+    #[error("could not read the Steam libraries ({0}); set {ENV_INSTALL} to the game folder")]
+    SteamLibraries(#[source] steamlocate::Error),
+    #[error(
+        "no {MODULE_FILE} found in the Steam libraries [{}] (searched steamapps\\common); set {ENV_INSTALL} to the game folder",
+        join_paths(.searched)
+    )]
+    NotFound { searched: Vec<PathBuf> },
+}
+
+fn join_paths(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// Finds a module file for display-name resolution.
+pub fn locate_elite_module() -> Result<PathBuf, DiscoverError> {
     if let Some(path) = from_env() {
         return Ok(path);
     }
 
-    let steam = SteamDir::locate().map_err(|e| {
-        format!(
-            "could not locate Steam ({}); pass --module \"<install>/Elite.module\"",
-            e
-        )
-    })?;
-    let libraries = steam.library_paths().map_err(|e| {
-        format!(
-            "could not read the Steam libraries ({}); pass --module \"<install>/Elite.module\"",
-            e
-        )
-    })?;
+    let steam = SteamDir::locate().map_err(DiscoverError::SteamNotFound)?;
+    let libraries = steam
+        .library_paths()
+        .map_err(DiscoverError::SteamLibraries)?;
 
     let mut candidates = Vec::new();
 
@@ -105,27 +118,22 @@ fn scan_library(library: &Path) -> Option<PathBuf> {
 
 /// Chooses one candidate: deduplicates paths, sorts by rank (stable, so library order breaks
 /// ties), warns when several remain, and reports what was searched when none did.
-fn pick(mut candidates: Vec<Candidate>, searched: &[PathBuf]) -> Result<PathBuf, String> {
+fn pick(mut candidates: Vec<Candidate>, searched: &[PathBuf]) -> Result<PathBuf, DiscoverError> {
     let mut seen = HashSet::new();
     candidates.retain(|c| seen.insert(c.module.to_string_lossy().to_ascii_lowercase()));
     if candidates.is_empty() {
-        let searched: Vec<String> = searched.iter().map(|p| p.display().to_string()).collect();
-        return Err(format!(
-            "no Elite.module found in the Steam libraries [{}] (searched steamapps\\common); pass --module \"<install>/Elite.module\"",
-            searched.join(", ")
-        ));
+        return Err(DiscoverError::NotFound {
+            searched: searched.to_vec(),
+        });
     }
     candidates.sort_by_key(|c| c.rank);
     let best = candidates[0].module.clone();
     if candidates.len() > 1 {
-        let list: Vec<String> = candidates
-            .iter()
-            .map(|c| c.module.display().to_string())
-            .collect();
-        eprintln!(
-            "warning: multiple Elite.module candidates found; using {}: {}",
+        let list: Vec<PathBuf> = candidates.into_iter().map(|c| c.module).collect();
+        tracing::warn!(
+            "multiple {MODULE_FILE} candidates found; using {}: {}",
             best.display(),
-            list.join(", ")
+            join_paths(&list)
         );
     }
     Ok(best)
@@ -209,9 +217,14 @@ mod tests {
     #[test]
     fn pick_reports_searched_paths_when_empty() {
         let err = pick(Vec::new(), &[PathBuf::from("/libs")]).unwrap_err();
-        assert!(err.contains("/libs"), "{}", err);
-        assert!(err.contains("steamapps\\common"), "{}", err);
-        assert!(err.contains("--module"), "{}", err);
+        assert!(
+            matches!(&err, DiscoverError::NotFound { searched } if searched == &[PathBuf::from("/libs")]),
+            "{err:?}"
+        );
+        let message = err.to_string();
+        assert!(message.contains("/libs"), "{message}");
+        assert!(message.contains("steamapps\\common"), "{message}");
+        assert!(!message.contains("--module"), "{message}");
     }
 
     #[test]
