@@ -15,7 +15,11 @@ pub fn candidate_game_dirs(document_dir: &Path, home_dir: Option<&Path>) -> Vec<
     #[cfg(target_os = "linux")]
     if let Some(home) = home_dir {
         for library in steam_libraries(home) {
-            candidates.push(proton_documents_dir(&library).join("My Games").join(GAME_DIR));
+            candidates.push(
+                proton_documents_dir(&library)
+                    .join("My Games")
+                    .join(GAME_DIR),
+            );
         }
     }
     #[cfg(not(target_os = "linux"))]
@@ -29,7 +33,9 @@ pub fn candidate_game_dirs(document_dir: &Path, home_dir: Option<&Path>) -> Vec<
 /// the last candidate (native documents dir) so the caller's not-found errors stay meaningful.
 pub fn resolve_game_dir(document_dir: &Path, home_dir: Option<&Path>) -> PathBuf {
     let mut candidates = candidate_game_dirs(document_dir, home_dir);
-    let fallback = candidates.pop().expect("candidates always has the native entry");
+    let fallback = candidates
+        .pop()
+        .expect("candidates always has the native entry");
 
     candidates
         .into_iter()
@@ -129,10 +135,15 @@ mod tests {
         std::fs::create_dir_all(home.join(".local/share/Steam/steamapps")).unwrap();
         std::fs::write(
             home.join(".local/share/Steam/steamapps/libraryfolders.vdf"),
-            format!("\"libraryfolders\" {{ \"1\" {{ \"path\" \"{}\" }} }}", library.display()),
+            format!(
+                "\"libraryfolders\" {{ \"1\" {{ \"path\" \"{}\" }} }}",
+                library.display()
+            ),
         )
         .unwrap();
-        let game_dir = proton_documents_dir(&library).join("My Games").join(GAME_DIR);
+        let game_dir = proton_documents_dir(&library)
+            .join("My Games")
+            .join(GAME_DIR);
         std::fs::create_dir_all(game_dir.join("Logfiles")).unwrap();
 
         let resolved = resolve_game_dir(&home.join("Documents"), Some(&home));
