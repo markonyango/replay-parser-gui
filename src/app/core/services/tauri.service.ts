@@ -63,6 +63,11 @@ export class TauriService {
                         matches.forEach((match) =>
                             this.knownMatchIDs.add(match.match_id)
                         );
+
+                        // Persist migrations once so old entries stop carrying legacy data.
+                        if (matches.some((match, i) => match !== stored[i])) {
+                            store.set('matches', matches);
+                        }
                     }
                 });
         });

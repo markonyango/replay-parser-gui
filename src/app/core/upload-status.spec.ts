@@ -34,6 +34,54 @@ describe('migrateStoredMatch', () => {
             message: 'bad replay',
         });
     });
+
+    it('strips raw command fields from stored actions and keeps the rest', () => {
+        const match: StoredMatch = {
+            ...stored({ kind: 'accepted', message: 'ok' }),
+            actions: [
+                {
+                    relic_id: 1,
+                    name: 'Alice',
+                    tick: 10,
+                    data: [3, 0, 1],
+                    command: {
+                        opcode_name: 'CMD_BuildSquad',
+                        blueprint: { display_name: 'Slugga Boyz' },
+                        raw_context: [0, 0, 0, 0],
+                        receivers: [{ raw: 1, kind: 0, instance_id: 1 }],
+                        custom: { tag: 255, length: null, data: [] },
+                    },
+                },
+                { relic_id: 2, name: 'Bob', tick: 20, data: [], command: null },
+            ],
+        } as StoredMatch;
+
+        const migrated = migrateStoredMatch(match);
+
+        expect(migrated).not.toBe(match as MatchItem);
+        expect(migrated.status).toBe(match.status as MatchItem['status']);
+        expect(migrated.actions as unknown[]).toEqual([
+            {
+                relic_id: 1,
+                name: 'Alice',
+                tick: 10,
+                command: {
+                    opcode_name: 'CMD_BuildSquad',
+                    blueprint: { display_name: 'Slugga Boyz' },
+                },
+            },
+            { relic_id: 2, name: 'Bob', tick: 20, command: null },
+        ]);
+    });
+
+    it('keeps already slim actions untouched', () => {
+        const match: StoredMatch = {
+            ...stored({ kind: 'pending' }),
+            actions: [{ relic_id: 1, name: 'Alice', tick: 10, command: null } as StoredMatch['actions'][number]],
+        };
+
+        expect(migrateStoredMatch(match)).toBe(match as MatchItem);
+    });
 });
 
 describe('uploadStatusText', () => {
