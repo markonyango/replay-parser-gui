@@ -42,14 +42,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
+        # Take the id from the create response: a fresh draft is not listed right away.
         run: |
-          gh release create "v${VERSION}" \
-            --draft \
-            --target "$GITHUB_SHA" \
-            --title "ESLReporter v${VERSION}" \
-            --notes-file notes.txt
           ID=$(gh api "repos/${{ github.repository }}/releases" \
-            --jq ".[] | select(.tag_name == \"v${VERSION}\") | .id")
+            -f tag_name="v${VERSION}" \
+            -f target_commitish="$GITHUB_SHA" \
+            -f name="ESLReporter v${VERSION}" \
+            -F body=@notes.txt \
+            -F draft=true \
+            --jq '.id')
+          if [ -z "$ID" ]; then
+            echo "::error::Could not read the id of the created release"
+            exit 1
+          fi
           echo "id=${ID}" >> $GITHUB_OUTPUT
 
   build:
