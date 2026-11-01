@@ -113,7 +113,7 @@ impl ReplayReportDto {
             map: map_slug(&replay.map),
             reporter: ReplayReportReporterDto {
                 date: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-                version: "1.0.7".into(),
+                version: "1.0.8".into(),
             },
             replay: if let Some(replay_string) = replay.replay.clone() {
                 replay_string

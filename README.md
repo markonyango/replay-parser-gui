@@ -206,7 +206,7 @@ On startup, the Angular app checks for updates through the Tauri updater plugin 
 
 - The current README previously contained generic Angular CLI boilerplate. This repository is primarily a Tauri desktop app with an Angular frontend.
 - The project includes several Tauri plugins beyond the current core flow, including updater, dialog, notifications, filesystem access, clipboard access, process control, shell integration, and global shortcuts.
-- The Rust crate version and bundled app version are currently `1.0.7`.
+- The Rust crate version and bundled app version are currently `1.0.8`.
 
 ## License
 
