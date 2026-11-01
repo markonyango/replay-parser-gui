@@ -34,6 +34,25 @@ The UI shows a match table with:
 - played-at timestamp
 - match details dialog with messages and parsed actions
 
+## Running On Linux
+
+On Linux the game runs through Steam with Proton. Download `ESLReporter_<version>_amd64.AppImage` from the latest GitHub release, make it executable and start it:
+
+```bash
+chmod +x ESLReporter_*_amd64.AppImage
+./ESLReporter_*_amd64.AppImage
+```
+
+The AppImage updates itself like the Windows installer does. Other Linux packages (`.deb`, `.rpm`) are not published because they cannot self-update.
+
+The replay and logfile are looked up inside the game's Proton prefix (Steam app id `56400`) in every Steam library, including Flatpak Steam:
+
+```text
+<steam library>/steamapps/compatdata/56400/pfx/drive_c/users/steamuser/Documents/My Games/Dawn of War II - Retribution/
+```
+
+If no prefix is found, the app falls back to `~/Documents/My Games/Dawn of War II - Retribution/`. The game install (for `Elite.module`) is found through Steam as well; set `DOW2_INSTALL` to the game folder for a non-Steam copy.
+
 ## Repository Layout
 
 ```text
@@ -113,6 +132,8 @@ When preparing a new release, bump the version in these three files:
 - `src-tauri/src/core/replay_reporter_dto.rs`: Update the hardcoded version string in the `ReplayReportDto::from()` implementation (e.g., `"1.0.7".into()`)
 
 All three files must have matching version numbers. The reporter version is sent to the server when uploading replay files. After bumping, commit these changes, then trigger the GitHub Actions release workflow from the **Actions** tab.
+
+The workflow creates a draft release, builds the Windows installers and the Linux AppImage into it, and only once both builds succeed publishes the release and updates the updater Gist with the `windows-x86_64` and `linux-x86_64` entries.
 
 ## Release Builds And Signing
 

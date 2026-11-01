@@ -3,11 +3,16 @@ name: Release
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  release:
-    runs-on: windows-latest
-    permissions:
-      contents: write
+  # Creates the draft release both platform builds upload into.
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_id: ${{ steps.release.outputs.id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -16,22 +21,62 @@ jobs:
 
       - name: Read version
         id: version
-        shell: bash
         run: echo "version=$(jq -r '.version' src-tauri/tauri.conf.json)" >> $GITHUB_OUTPUT
 
       - name: Generate release notes
-        id: notes
-        shell: bash
         run: |
           LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -n "$LAST_TAG" ]; then
-            NOTES=$(git log "$LAST_TAG"..HEAD --oneline --no-merges)
+            git log "$LAST_TAG"..HEAD --oneline --no-merges > notes.txt
           else
-            NOTES=$(git log --oneline --no-merges -20)
+            git log --oneline --no-merges -20 > notes.txt
           fi
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: notes.txt
+
+      - name: Create draft release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" \
+            --draft \
+            --target "$GITHUB_SHA" \
+            --title "ESLReporter v${VERSION}" \
+            --notes-file notes.txt
+          ID=$(gh api "repos/${{ github.repository }}/releases" \
+            --jq ".[] | select(.tag_name == \"v${VERSION}\") | .id")
+          echo "id=${ID}" >> $GITHUB_OUTPUT
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+          # Oldest supported runner, so the AppImage links against an older glibc
+          # and still runs on older distros.
+          - platform: ubuntu-22.04
+            args: '--bundles appimage'
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config libssl-dev libgtk-3-dev \
+            libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev \
+            libayatana-appindicator3-dev librsvg2-dev
 
       - uses: actions/setup-node@v4
         with:
@@ -46,53 +91,84 @@ jobs:
 
       - run: npm ci
 
-      - name: Build and publish release
-        id: tauri
+      - name: Build and upload bundles
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         with:
-          tagName: v${{ steps.version.outputs.version }}
-          releaseName: ESLReporter v${{ steps.version.outputs.version }}
-          releaseBody: ${{ steps.notes.outputs.notes }}
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          # The updater reads the Gist manifest written below, not latest.json.
+          includeUpdaterJson: false
+          args: ${{ matrix.args }}
+
+  # Publishes the release and points the updater Gist at it, once both builds succeeded.
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - name: Download updater signatures
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          gh release download "v${VERSION}" \
+            --repo "${{ github.repository }}" \
+            --pattern '*.sig' \
+            --dir sigs
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: gh release edit "v${VERSION}" --repo "${{ github.repository }}" --draft=false
 
       - name: Update updater Gist
-        shell: bash
         env:
           GIST_PAT: ${{ secrets.GIST_PAT }}
-          VERSION: ${{ steps.version.outputs.version }}
-          NOTES: ${{ steps.notes.outputs.notes }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           REPO="${{ github.repository }}"
           BASE_URL="https://github.com/${REPO}/releases/download/v${VERSION}"
 
-          MSI_SIG=$(cat "src-tauri/target/release/bundle/msi/ESLReporter_${VERSION}_x64_en-US.msi.zip.sig")
+          MSI_FILE="ESLReporter_${VERSION}_x64_en-US.msi.zip"
+          APPIMAGE_FILE="ESLReporter_${VERSION}_amd64.AppImage.tar.gz"
+          MSI_SIG=$(cat "sigs/${MSI_FILE}.sig")
+          APPIMAGE_SIG=$(cat "sigs/${APPIMAGE_FILE}.sig")
 
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
           MANIFEST=$(jq -n \
             --arg version "$VERSION" \
-            --arg notes "$NOTES" \
+            --rawfile notes notes.txt \
             --arg pub_date "$PUB_DATE" \
-            --arg msi_url "${BASE_URL}/ESLReporter_${VERSION}_x64_en-US.msi.zip" \
+            --arg msi_url "${BASE_URL}/${MSI_FILE}" \
             --arg msi_sig "$MSI_SIG" \
+            --arg appimage_url "${BASE_URL}/${APPIMAGE_FILE}" \
+            --arg appimage_sig "$APPIMAGE_SIG" \
             '{
               version: $version,
-              notes: $notes,
+              notes: ($notes | rtrimstr("\n")),
               pub_date: $pub_date,
               platforms: {
                 "windows-x86_64": {
                   url: $msi_url,
                   signature: $msi_sig
+                },
+                "linux-x86_64": {
+                  url: $appimage_url,
+                  signature: $appimage_sig
                 }
               }
             }')
 
           GIST_ID="02ca7c931510bbd2a225a3588bb6e9c1"
-          curl -s -X PATCH \
+          curl -sS --fail-with-body -X PATCH \
             -H "Authorization: token ${GIST_PAT}" \
             -H "Content-Type: application/json" \
             -d "{\"files\":{\"esl-reporter-update.json\":{\"content\":$(echo "$MANIFEST" | jq -Rs .)}}}" \
