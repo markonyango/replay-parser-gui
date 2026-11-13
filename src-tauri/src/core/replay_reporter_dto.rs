@@ -16,6 +16,8 @@ const UNKNOWN_WINNER: i32 = -1;
 pub struct ReplayReportDto {
     aborted: bool,
     actions: Vec<Action>,
+    /// Every decoded command, sent as parsed, `command` and `command_error` included.
+    commands: Vec<Action>,
     dev: bool,
     id: String,
     map: String,
@@ -108,12 +110,13 @@ impl ReplayReportDto {
                     command_error: None,
                 })
                 .collect(),
+            commands: replay.commands.clone(),
             dev: replay.dev.unwrap_or_default(),
             id: replay.id.to_string(),
             map: map_slug(&replay.map),
             reporter: ReplayReportReporterDto {
                 date: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
-                version: "1.0.8".into(),
+                version: "1.0.9".into(),
             },
             replay: if let Some(replay_string) = replay.replay.clone() {
                 replay_string
@@ -176,5 +179,71 @@ mod tests {
         ]);
 
         assert_eq!(ReplayReportDto::from(&game).winner, UNKNOWN_WINNER);
+    }
+
+    #[test]
+    fn reports_version_1_0_9() {
+        let json = serde_json::to_value(ReplayReportDto::from(&game_with(&[]))).unwrap();
+
+        assert_eq!(json["reporter"]["version"], "1.0.9");
+    }
+
+    #[test]
+    fn upload_carries_every_decoded_command() {
+        let replay = parser_lib::parse_raw("3v3.rec".to_string()).unwrap();
+        let game = ExtendedGameInformation {
+            commands: replay.commands.clone(),
+            ..Default::default()
+        };
+
+        let json = serde_json::to_value(ReplayReportDto::from(&game)).unwrap();
+        let commands = json["commands"].as_array().unwrap();
+
+        assert!(!commands.is_empty(), "fixture has commands");
+        assert_eq!(commands.len(), replay.commands.len());
+        for command in commands {
+            assert!(command["tick"].is_u64(), "{command}");
+            assert!(command["relic_id"].is_u64(), "{command}");
+            assert!(command["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|b| b.as_u64().is_some_and(|b| b <= 255)));
+            let error = &command["command_error"];
+            assert!(error.is_null() || error.is_string(), "{command}");
+            assert!(
+                command["command"].is_null() || command["command"]["opcode"].is_u64(),
+                "{command}"
+            );
+        }
+
+        let (index, decoded) = replay
+            .commands
+            .iter()
+            .enumerate()
+            .find(|(_, c)| {
+                c.command
+                    .as_ref()
+                    .is_some_and(|c| c.opcode.name().is_some())
+            })
+            .expect("fixture has a named decoded command");
+        let sent = &commands[index]["command"];
+        let decoded = decoded.command.as_ref().unwrap();
+        assert_eq!(sent["opcode"], u64::from(decoded.opcode.value()));
+        assert_eq!(sent["opcode_name"], decoded.opcode.name().unwrap());
+
+        // Blueprints are only resolved when the game data is installed.
+        if let Some((index, with_blueprint)) = replay
+            .commands
+            .iter()
+            .enumerate()
+            .find(|(_, c)| c.command.as_ref().is_some_and(|c| c.blueprint.is_some()))
+        {
+            let blueprint = with_blueprint.command.as_ref().unwrap().blueprint.as_ref();
+            assert_eq!(
+                commands[index]["command"]["blueprint"],
+                serde_json::to_value(blueprint).unwrap()
+            );
+        }
     }
 }
