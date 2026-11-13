@@ -55,6 +55,10 @@ pub struct ExtendedGameInformation {
     pub messages: Vec<Message>,
     #[serde(serialize_with = "serialize_actions_for_frontend")]
     pub actions: Vec<Action>,
+    /// Every decoded command, for the upload only. Skipped here because this struct
+    /// also goes to the frontend and store.json, and the list is ~1.5 MB per 18-minute game.
+    #[serde(skip)]
+    pub commands: Vec<Action>,
     pub aborted: bool,
     pub frames: usize,
     pub ended_at: String,
@@ -167,6 +171,7 @@ impl ExtendedGameInformation {
             ended_at: parsed_replay.date.clone(),
             messages: parsed_replay.messages.clone(),
             actions: parsed_replay.actions.clone(),
+            commands: parsed_replay.commands.clone(),
             players: transform_player_information(parsed_logfile_game, parsed_replay),
             name: parsed_replay.name.clone(),
             mod_chksum: parsed_replay.mod_chksum as usize,
@@ -524,6 +529,20 @@ mod tests {
         // The upload still carries the raw bytes the frontend no longer gets.
         let upload = serde_json::to_value(ReplayReportDto::from(&game)).unwrap();
         assert!(!upload["actions"][0]["data"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn frontend_payload_has_no_commands() {
+        let replay = crate::core::parse_replay_file(Path::new(FIXTURE_REPLAY)).unwrap();
+        let game = ExtendedGameInformation {
+            commands: replay.commands.clone(),
+            ..sample_game()
+        };
+        assert!(!game.commands.is_empty(), "fixture has commands");
+
+        let json = serde_json::to_value(&game).unwrap();
+
+        assert!(json.get("commands").is_none(), "{:?}", json.get("commands"));
     }
 
     fn temp_dir(tag: &str) -> PathBuf {
